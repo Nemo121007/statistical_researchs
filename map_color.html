@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoJSON Карта</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        .file-upload {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        }
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            max-width: 300px;
+        }
+        .popup-content {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .popup-content h4 {
+            margin-top: 0;
+            color: #0056b3;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+        .popup-content table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .popup-content th, .popup-content td {
+            padding: 6px 4px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+            font-size: 14px;
+        }
+        .popup-content th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .legend {
+            margin-top: 15px;
+            line-height: 20px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 10px;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+        .error-message {
+            color: #d9534f;
+            font-weight: bold;
+        }
+        .success-message {
+            color: #5cb85c;
+            font-weight: bold;
+        }
+        .polygon-legend {
+            background-color: rgba(51, 136, 255, 0.3);
+            border: 2px solid #0056b3;
+        }
+        .tags-container {
+            margin-top: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .tags-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .tags-table th, .tags-table td {
+            padding: 4px;
+            border-bottom: 1px solid #eee;
+            font-size: 12px;
+        }
+        .tags-table th {
+            background-color: #f8f8f8;
+            text-align: left;
+        }
+        /* Градиент для путей в легенде */
+        .way-gradient {
+            background: linear-gradient(to right, #ff0000, #0000ff, #00ff00, #ffff00, #ff00ff, #00ffff);
+        }
+        /* Стили для чекбоксов в легенде */
+        .legend-checkbox {
+            margin-right: 5px;
+        }
+        .legend-item.disabled {
+            opacity: 0.5;
+        }
+        /* Стили для точек в легенде */
+        .point-legend {
+            background-color: #ff7800;
+            border-radius: 50%;
+            border: 2px solid #000;
+            width: 12px;
+            height: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="file-upload">
+        <h4>Загрузка GeoJSON</h4>
+        <input type="file" id="file-input" accept=".geojson,.json" />
+        <div id="file-info"></div>
+    </div>
+    <div class="info-panel">
+        <h4>Информация о карте</h4>
+        <div id="info-content">
+            <p>Выберите GeoJSON файл для отображения данных</p>
+        </div>
+        <div class="legend">
+            <h4>Легенда</h4>
+            <div class="legend-item">
+                <input type="checkbox" id="toggle-ways" class="legend-checkbox" checked>
+                <div class="legend-color way-gradient"></div>
+                <span>Пути</span>
+            </div>
+            <div class="legend-item">
+                <input type="checkbox" id="toggle-polygons" class="legend-checkbox" checked>
+                <div class="legend-color polygon-legend"></div>
+                <span>Многоугольники</span>
+            </div>
+            <div class="legend-item">
+                <input type="checkbox" id="toggle-points" class="legend-checkbox" checked>
+                <div class="legend-color point-legend"></div>
+                <span>Точки</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация карты
+        var map = L.map('map').setView([55.755864, 37.617635], 10);
+
+        // Базовый слой OpenStreetMap
+        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Дополнительные слои
+        var satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        });
+
+        var terrainLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+        });
+
+        // Контроль слоев
+        var baseMaps = {
+            "OpenStreetMap": osmLayer,
+            "Спутник": satelliteLayer,
+            "Рельеф": terrainLayer
+        };
+        L.control.layers(baseMaps).addTo(map);
+
+        // Массив цветов для путей
+        var wayColors = [
+            '#ff0000', '#0000ff', '#00ff00', '#ffff00',
+            '#ff00ff', '#00ffff', '#ff7700', '#9900ff',
+            '#ff0099', '#66ff00', '#0099ff', '#ff6600'
+        ];
+
+        // Создаем отдельные группы для путей, полигонов и точек
+        var waysLayer = L.featureGroup().addTo(map);
+        var polygonsLayer = L.featureGroup().addTo(map);
+        var pointsLayer = L.featureGroup().addTo(map);
+
+        // Функция для загрузки GeoJSON данных
+        function loadGeoJSONData(data, sourceName) {
+            try {
+                // Проверяем, что данные в правильном формате
+                if (!data || !data.features || !Array.isArray(data.features)) {
+                    throw new Error("Некорректный формат GeoJSON");
+                }
+
+                // Очищаем предыдущие слои
+                waysLayer.clearLayers();
+                polygonsLayer.clearLayers();
+                pointsLayer.clearLayers();
+
+                // Обновляем информацию о данных
+                var waysCount = 0;
+                var polygonsCount = 0;
+                var pointsCount = 0;
+
+                // Предварительная обработка данных для назначения цветов путям
+                var wayCounter = 0;
+                data.features.forEach(function(feature) {
+                    if (feature.geometry.type === "LineString") {
+                        waysCount++;
+                        // Назначаем цвет из массива по порядку
+                        feature.properties._color = wayColors[wayCounter % wayColors.length];
+                        wayCounter++;
+                    } else if (feature.geometry.type === "Polygon") {
+                        polygonsCount++;
+                    } else if (feature.geometry.type === "Point") {
+                        pointsCount++;
+                    }
+                });
+
+                $('#info-content').html(`
+                    <p class="success-message">Данные успешно загружены!</p>
+                    <p>Источник: ${sourceName}</p>
+                    <p>Путей: ${waysCount}</p>
+                    <p>Многоугольников: ${polygonsCount}</p>
+                    <p>Точек: ${pointsCount}</p>
+                `);
+
+                // Создаем слой с геообъектами
+                var geojsonLayer = L.geoJSON(data, {
+                    style: function(feature) {
+                        // Стиль для полигонов
+                        if (feature.geometry.type === "Polygon") {
+                            return {
+                                fillColor: "#3388ff",
+                                color: "#0056b3",
+                                weight: 2,
+                                opacity: 1,
+                                fillOpacity: 0.3
+                            };
+                        }
+                        // Стиль для линий
+                        else if (feature.geometry.type === "LineString") {
+                            return {
+                                color: feature.properties._color,
+                                weight: 4,
+                                opacity: 0.8
+                            };
+                        }
+                        // Для других типов геометрий стиль не применяется
+                        return {};
+                    },
+                    pointToLayer: function(feature, latlng) {
+                        // Создаем маркеры для точек
+                        return L.circleMarker(latlng, {
+                            radius: 6,
+                            fillColor: "#ff7800",
+                            color: "#000",
+                            weight: 1,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        });
+                    },
+                    onEachFeature: function(feature, layer) {
+                        // Создаем всплывающее окно с информацией
+                        var popupContent = '<div class="popup-content">';
+
+                        // Определяем тип объекта
+                        var featureType = feature.geometry.type;
+                        var typeName = "";
+
+                        if (featureType === "LineString") {
+                            typeName = "Way (линия)";
+                            if (feature.id) {
+                                typeName += ` ID: ${feature.id}`;
+                            }
+                            popupContent += `<h4>${typeName}</h4>`;
+                        } else if (featureType === "Polygon") {
+                            typeName = "Многоугольник (Polygon)";
+                            if (feature.id) {
+                                typeName += ` ID: ${feature.id}`;
+                            }
+                            popupContent += `<h4>${typeName}</h4>`;
+                        } else if (featureType === "Point") {
+                            typeName = "Точка (Point)";
+                            if (feature.id) {
+                                typeName += ` ID: ${feature.id}`;
+                            }
+                            popupContent += `<h4>${typeName}</h4>`;
+                        }
+
+                        // Добавляем таблицу со свойствами
+                        popupContent += '<table>';
+
+                        // Добавляем информацию о координатах для точек
+                        if (featureType === "Point" && feature.geometry.coordinates) {
+                            popupContent += `<tr><th>Координаты</th><td>${feature.geometry.coordinates[1].toFixed(6)}, ${feature.geometry.coordinates[0].toFixed(6)}</td></tr>`;
+                        }
+
+                        // Добавляем информацию о количестве точек для линий
+                        if (featureType === "LineString" && feature.geometry.coordinates) {
+                            popupContent += `<tr><th>Точек в линии</th><td>${feature.geometry.coordinates.length}</td></tr>`;
+
+                            // Добавляем начальную и конечную точки
+                            if (feature.geometry.coordinates.length > 0) {
+                                var startCoord = feature.geometry.coordinates[0];
+                                var endCoord = feature.geometry.coordinates[feature.geometry.coordinates.length - 1];
+                                popupContent += `<tr><th>Начальная точка</th><td>${startCoord[1].toFixed(6)}, ${startCoord[0].toFixed(6)}</td></tr>`;
+                                popupContent += `<tr><th>Конечная точка</th><td>${endCoord[1].toFixed(6)}, ${endCoord[0].toFixed(6)}</td></tr>`;
+                            }
+                        }
+
+                        // Добавляем информацию о количестве точек для полигонов
+                        if (featureType === "Polygon" && feature.geometry.coordinates) {
+                            var totalPoints = 0;
+                            feature.geometry.coordinates.forEach(function(ring) {
+                                totalPoints += ring.length;
+                            })
+                            popupContent += `<tr><th>Всего точек</th><td>${totalPoints}</td></tr>`;
+
+                            // Добавляем первую точку внешнего кольца
+                            if (feature.geometry.coordinates[0] && feature.geometry.coordinates[0].length > 0) {
+                                var firstPoint = feature.geometry.coordinates[0][0];
+                                popupContent += `<tr><th>Первая точка</th><td>${firstPoint[1].toFixed(6)}, ${firstPoint[0].toFixed(6)}</td></tr>`;
+                            }
+                        }
+
+                        // Добавляем информацию об узлах для линий
+                        if (featureType === "LineString" && feature.properties.OSM_id_nodes) {
+                            var nodes = feature.properties.OSM_id_nodes;
+                            popupContent += `<tr><th>Узлы</th><td>${nodes.length} узлов</td></tr>`;
+
+                            // Показываем первые и последние несколько ID узлов
+                            if (nodes.length > 0) {
+                                var nodesStr = "";
+                                if (nodes.length <= 10) {
+                                    nodesStr = nodes.join(", ");
+                                } else {
+                                    nodesStr = nodes.slice(0, 5).join(", ") +
+                                              " ... " +
+                                              nodes.slice(-5).join(", ");
+                                }
+                                popupContent += `<tr><th>ID узлов</th><td>${nodesStr}</td></tr>`;
+                            }
+                        }
+
+                        // Добавляем информацию о кольцах для полигонов
+                        if (featureType === "Polygon" && feature.properties.OSM_id_nodes) {
+                            var rings = feature.properties.OSM_id_nodes;
+                            popupContent += `<tr><th>Колец</th><td>${rings.length}</td></tr>`;
+
+                            if (rings.length > 0) {
+                                popupContent += `<tr><th>Внешнее кольцо</th><td>${rings[0].length} узлов</td></tr>`;
+
+                                if (rings.length > 1) {
+                                    popupContent += `<tr><th>Внутренние кольца</th><td>${rings.length - 1}</td></tr>`;
+                                }
+                            }
+                        }
+
+                        // Добавляем информацию об OSM_id для точек
+                        if (featureType === "Point" && feature.properties.OSM_id) {
+                            popupContent += `<tr><th>OSM ID</th><td>${feature.properties.OSM_id}</td></tr>`;
+                        }
+
+                        // Добавляем все остальные свойства, кроме OSM_id, OSM_id_nodes, tags и _color
+                        for (var key in feature.properties) {
+                            if (key !== 'OSM_id' && key !== 'OSM_id_nodes' && key !== 'tags' && key !== '_color') {
+                                popupContent += `<tr><th>${key}</th><td>${feature.properties[key]}</td></tr>`;
+                            }
+                        }
+
+                        popupContent += '</table>';
+
+                        // Добавляем теги в отдельную таблицу
+                        if (feature.properties.tags && Object.keys(feature.properties.tags).length > 0) {
+                            popupContent += '<div class="tags-container">';
+                            popupContent += '<h5>Теги:</h5>';
+                            popupContent += '<table class="tags-table">';
+
+                            for (var tagKey in feature.properties.tags) {
+                                popupContent += `<tr><th>${tagKey}</th><td>${feature.properties.tags[tagKey]}</td></tr>`;
+                            }
+
+                            popupContent += '</table>';
+                            popupContent += '</div>';
+                        }
+
+                        popupContent += '</div>';
+                        layer.bindPopup(popupContent);
+
+                        // Добавляем обработчики для выделения при наведении
+                        layer.on({
+                            mouseover: highlightFeature,
+                            mouseout: resetHighlight
+                        });
+
+                        // Добавляем слой в соответствующую группу
+                        if (featureType === "LineString") {
+                            waysLayer.addLayer(layer);
+                        } else if (featureType === "Polygon") {
+                            polygonsLayer.addLayer(layer);
+                        } else if (featureType === "Point") {
+                            pointsLayer.addLayer(layer);
+                        }
+                    }
+                });
+
+                // Автоматически подгоняем границы карты под все объекты
+                if (data.features.length > 0) {
+                    var allLayers = L.featureGroup([waysLayer, polygonsLayer, pointsLayer]);
+                    map.fitBounds(allLayers.getBounds(), {padding: [20, 20]});
+                }
+
+            } catch (error) {
+                $('#info-content').html(`
+                    <p class="error-message">Ошибка обработки данных:</p>
+                    <p>${error.message}</p>
+                `);
+                console.error("Ошибка обработки GeoJSON:", error);
+            }
+        }
+
+        // Функция для выделения объекта при наведении
+        function highlightFeature(e) {
+            var layer = e.target;
+            if (layer instanceof L.Path) {
+                // Для линий и полигонов
+                var style = {
+                    weight: 6,
+                    opacity: 1
+                };
+
+                // Дополнительные стили для полигонов
+                if (layer.feature && layer.feature.geometry.type === "Polygon") {
+                    style.fillOpacity = 0.5;
+                }
+
+                layer.setStyle(style);
+            } else if (layer instanceof L.CircleMarker) {
+                // Для точек
+                layer.setRadius(8);
+                layer.setStyle({
+                    weight: 2,
+                    fillColor: "#ffaa00"
+                });
+            }
+            if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                layer.bringToFront();
+            }
+        }
+
+        // Функция для сброса выделения
+        function resetHighlight(e) {
+            var layer = e.target;
+            if (layer instanceof L.Path) {
+                // Для линий и полигонов
+                if (layer.feature && layer.feature.geometry.type === "LineString") {
+                    waysLayer.resetStyle(e.target);
+                } else if (layer.feature && layer.feature.geometry.type === "Polygon") {
+                    polygonsLayer.resetStyle(e.target);
+                }
+            } else if (layer instanceof L.CircleMarker) {
+                // Для точек
+                layer.setRadius(6);
+                layer.setStyle({
+                    weight: 1,
+                    fillColor: "#ff7800"
+                });
+            }
+        }
+
+        // Обработчик загрузки файла
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        var data = JSON.parse(event.target.result);
+                        loadGeoJSONData(data, file.name);
+                        document.getElementById('file-info').innerHTML =
+                            `<p class="success-message">Файл ${file.name} успешно загружен</p>`;
+                    } catch (error) {
+                        document.getElementById('file-info').innerHTML =
+                            `<p class="error-message">Ошибка чтения файла: ${error.message}</p>`;
+                        console.error("Ошибка чтения файла:", error);
+                    }
+                };
+                reader.onerror = function() {
+                    document.getElementById('file-info').innerHTML =
+                        '<p class="error-message">Ошибка чтения файла</p>';
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Обработчики для чекбоксов в легенде
+        document.getElementById('toggle-ways').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(waysLayer);
+                this.parentElement.classList.remove('disabled');
+            } else {
+                map.removeLayer(waysLayer);
+                this.parentElement.classList.add('disabled');
+            }
+        });
+
+        document.getElementById('toggle-polygons').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(polygonsLayer);
+                this.parentElement.classList.remove('disabled');
+            } else {
+                map.removeLayer(polygonsLayer);
+                this.parentElement.classList.add('disabled');
+            }
+        });
+
+        document.getElementById('toggle-points').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(pointsLayer);
+                this.parentElement.classList.remove('disabled');
+            } else {
+                map.removeLayer(pointsLayer);
+                this.parentElement.classList.add('disabled');
+            }
+        });
+    </script>
+</body>
+</html>
