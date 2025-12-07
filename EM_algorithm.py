@@ -30,12 +30,22 @@ def print_results(smoothed_state_means: np.ndarray, data: np.ndarray, name_file:
     else:
         plt.show()
 
+def normalize_data(data):
+    mean = np.mean(data, axis=0)
+    std = np.std(data, axis=0)
+    # Защита от деления на ноль
+    std = np.where(std == 0, 1, std)
+    return (data - mean) / std, mean, std
+
 
 def em_algorithm(data: np.ndarray, n_iter: int = 100):
     # Начальные приближения
     A_init = np.eye(2)
     Q_init = np.eye(2) * 0.1
     R_init = np.eye(2) * 0.1
+
+    # data, mean, std = normalize_data(data)
+    data = data[::100]
 
     # Подготовка данных: все наблюдения, включая первое
     observations = data  # Используем все данные
@@ -73,31 +83,37 @@ if __name__ == "__main__":
         data = read_data(file_name)
 
         # Запускаем EM-алгоритм
-        A_est, Q_est, R_est, smoothed_state_means = em_algorithm(data=data)
+        try:
+            A_est, Q_est, R_est, smoothed_state_means = em_algorithm(data=data)
 
-        # Выводим результаты
-        result = (f"\nРезультаты {file_name.name}:\n"
-                  f"Оцененная матрица A:\n{A_est}\n"
-                  f"Оцененная матрица Q:\n{Q_est}\n"
-                  f"Оцененная матрица R:\n{R_est}\n")
-        print(result)
-        with path_log.open('a', encoding='utf-8') as f:
-            f.write(result)
+            # Выводим результаты
+            result = (f"\nРезультаты {file_name.name}:\n"
+                      f"Оцененная матрица A:\n{A_est}\n"
+                      f"Оцененная матрица Q:\n{Q_est}\n"
+                      f"Оцененная матрица R:\n{R_est}\n")
+            print(result)
+            with path_log.open('a', encoding='utf-8') as f:
+                f.write(result)
 
-        print_results(smoothed_state_means=smoothed_state_means,
-                      data=data,
-                      name_file=file_name.parent.parent / "pictures" / f"{file_name.stem}_result.png")
+            print_results(smoothed_state_means=smoothed_state_means,
+                          data=data,
+                          name_file=file_name.parent.parent / "pictures" / f"{file_name.stem}_result.png")
+        except:
+            pass
 
         data = data[::-1]
-        A_est, Q_est, R_est, smoothed_state_means = em_algorithm(data=data)
-        result = (f"\nРезультаты (обратный порядок) {file_name.name}:\n"
-                  f"Оцененная матрица A:\n{A_est}\n"
-                  f"Оцененная матрица Q:\n{Q_est}\n"
-                  f"Оцененная матрица R:\n{R_est}\n")
-        print(result)
-        with path_log.open('a', encoding='utf-8') as f:
-            f.write(result)
-        print_results(smoothed_state_means=smoothed_state_means,
-                      data=data,
-                      name_file=file_name.parent.parent / "pictures" / f"{file_name.stem}_result_reverce.png")
+        try:
+            A_est, Q_est, R_est, smoothed_state_means = em_algorithm(data=data)
+            result = (f"\nРезультаты (обратный порядок) {file_name.name}:\n"
+                      f"Оцененная матрица A:\n{A_est}\n"
+                      f"Оцененная матрица Q:\n{Q_est}\n"
+                      f"Оцененная матрица R:\n{R_est}\n")
+            print(result)
+            with path_log.open('a', encoding='utf-8') as f:
+                f.write(result)
+            print_results(smoothed_state_means=smoothed_state_means,
+                          data=data,
+                          name_file=file_name.parent.parent / "pictures" / f"{file_name.stem}_result_reverse.png")
+        except:
+            pass
 
