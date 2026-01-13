@@ -1,0 +1,84 @@
+2025-12-11 14:35:38,735 - root - WARNING - 
+Читаются одновременно пути и области. Это может привести к некорректному распознаванию объектов.
+2025-12-11 14:42:02,017 - __main__ - INFO - 
+Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/osm/denmark.osm.pbf
+Узлов: 342726
+Путей: 2545
+Областей: 1285
+
+2025-12-11 14:42:07,637 - root - INFO - GeoJSON файл записан в /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/denmark.osm_full.geojson с 3830 объектами
+2025-12-11 14:42:57,277 - __main__ - INFO - 
+Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/osm/estonia.osm.pbf
+Узлов: 755554
+Путей: 3578
+Областей: 2173
+
+2025-12-11 14:43:04,984 - root - INFO - GeoJSON файл записан в /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/estonia.osm_full.geojson с 5751 объектами
+2025-12-11 14:47:37,371 - __main__ - INFO - 
+Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/osm/finland.osm.pbf
+Узлов: 5952269
+Путей: 91325
+Областей: 70783
+
+2025-12-11 14:48:56,079 - root - INFO - GeoJSON файл записан в /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/finland.osm_full.geojson с 162108 объектами
+2025-12-11 14:51:24,240 - __main__ - INFO - 
+Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/osm/latvia.osm.pbf
+Узлов: 82620
+Путей: 318
+Областей: 76
+
+2025-12-11 14:51:24,930 - root - INFO - GeoJSON файл записан в /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/latvia.osm_full.geojson с 394 объектами
+2025-12-11 14:52:39,712 - __main__ - INFO - 
+Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/osm/lithuania.osm.pbf
+Узлов: 106826
+Путей: 614
+Областей: 102
+
+2025-12-11 14:52:40,379 - root - INFO - GeoJSON файл записан в /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/lithuania.osm_full.geojson с 716 объектами
+2025-12-11 14:57:04,308 - __main__ - INFO - 
+Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/osm/sweden.osm.pbf
+Узлов: 3758511
+Путей: 79070
+Областей: 44570
+
+2025-12-11 14:57:52,754 - root - INFO - GeoJSON файл записан в /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/sweden.osm_full.geojson с 123640 объектами
+2025-12-11 15:28:29,507 - __main__ - INFO - 
+Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/osm/germany-latest.osm.pbf
+Узлов: 799182
+Путей: 7515
+Областей: 3821
+
+2025-12-11 15:28:37,552 - root - INFO - GeoJSON файл записан в /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/germany-latest.osm_full.geojson с 11336 объектами
+2025-12-11 15:36:04,126 - __main__ - INFO - 
+Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/osm/sweden.osm.pbf
+Узлов: 3758511
+Путей: 79070
+Областей: 44570
+
+2025-12-11 15:36:52,981 - root - INFO - GeoJSON файл записан в /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/sweden.osm_full.geojson с 123640 объектами
+2025-12-11 15:42:51,919 - __main__ - INFO - 
+Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/osm/sweden.osm.pbf
+Узлов: 3318612
+Путей: 78697
+Областей: 44250
+
+2025-12-11 15:43:39,500 - root - INFO - GeoJSON файл записан в /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/sweden.osm_full.geojson с 122947 объектами
+2025-12-11 15:48:33,480 - __main__ - INFO - Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/sweden_full.geojson
+Геометрий: 122947
+
+2025-12-11 15:50:40,760 - __main__ - INFO - Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/sweden_full.geojson
+Геометрий: 122947
+
+2025-12-11 15:53:28,068 - __main__ - INFO - Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/sweden_full.geojson
+Геометрий: 122947
+
+2025-12-11 15:55:56,753 - __main__ - INFO - Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/sweden_full.geojson
+Геометрий: 122947
+
+2025-12-12 14:00:50,378 - __main__ - INFO - 
+Файл: /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/osm/poland.osm.pbf
+Узлов: 62594
+Путей: 971
+Областей: 306
+
+2025-12-12 14:00:51,197 - root - INFO - GeoJSON файл записан в /home/ubuntu/PycharmProjects/dots-backend/application/modules/bg_services/gps/data/output/poland.osm_full.geojson с 1277 объектами
