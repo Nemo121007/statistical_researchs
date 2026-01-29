@@ -3,12 +3,11 @@
 import logging
 from typing import Dict, Optional
 
-import osmium
 
-from ..models.way_model import Way
+from models.way_model import Way
 
 
-class WayCollector(osmium.SimpleHandler):
+class WayCollector():
     """Класс для сбора и управления путями OSM.
     Обеспечивает уникальность хранимых путей и их многократное использование.
     (Используется при парсинге данных OSM)

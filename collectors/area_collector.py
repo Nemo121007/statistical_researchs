@@ -3,7 +3,7 @@
 import logging
 from typing import Dict, Optional
 
-from ..models.area_model import Area
+from models.area_model import Area
 
 
 class AreaCollector:

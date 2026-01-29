@@ -8,7 +8,7 @@ from typing import (
 
 from shapely.geometry import Point, Polygon
 
-from ..models.node_model import Node
+from models.node_model import Node
 
 
 class Area:

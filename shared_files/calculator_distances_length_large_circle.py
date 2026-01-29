@@ -8,7 +8,7 @@ from typing import Union
 import numpy as np
 from numpy._typing import NDArray
 
-from ....core.config import CorrectorSettings
+from shared_files.config import CorrectorSettings
 
 
 class CalculatorDistancesLengthLargeCircle:

@@ -12,16 +12,16 @@ import numpy as np
 from geojson import Feature
 from shapely.geometry import Polygon, LineString
 
-from application.modules.bg_services.gps.corrector.tracker.models.way_model import Way
-from application.modules.bg_services.gps.corrector.tracker.models.area_model import Area
-from application.modules.bg_services.gps.corrector.tracker.models.node_model import Node
-from application.modules.bg_services.gps.corrector.tracker.collectors.way_collector import (
+from models.way_model import Way
+from models.area_model import Area
+from models.node_model import Node
+from collectors.way_collector import (
     WayCollector,
 )
-from application.modules.bg_services.gps.corrector.tracker.collectors.area_collector import (
+from collectors.area_collector import (
     AreaCollector,
 )
-from application.modules.bg_services.gps.corrector.tracker.collectors.node_collector import (
+from collectors.node_collector import (
     NodeCollector,
 )
 

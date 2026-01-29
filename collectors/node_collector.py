@@ -3,7 +3,7 @@
 import logging
 from typing import Dict
 
-from ..models.node_model import Node
+from models.node_model import Node
 
 
 class NodeCollector:
