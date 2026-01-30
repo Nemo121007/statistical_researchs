@@ -1,10 +1,12 @@
 """Модуль для извлечения и обработки путей из CSV файлов."""
-
+import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from IOPs_geojson import IOPs_geojson
+from settings.settings import DefaultLocate
 from way_model import Way
 from node_model import Node
 from way_collector import (
@@ -24,60 +26,46 @@ class ExtractingPaths:
     @staticmethod
     def extract_data():
         """Извлекает и обрабатывает данные из CSV файлов, создавая GeoJSON и CSV файлы."""
-        path = Path(__file__).parent / "data"
-        files = [file.name for file in path.iterdir() if file.is_file()]
+        path_file = DefaultLocate.DATA_RAW_DIR
+        files = [file.name for file in path_file.glob('*.csv')]
         for file in files:
             name = str(file).split(".")[0]
-            df = pd.read_csv(path / file)
-            print("Processing file:", file)
+            df = pd.read_csv(path_file / file)
+            logging.info(str(path_file/ file))
+            logging.info("Processing file: %s", file)
             df["time"] = pd.to_datetime(df["time"])
             min_value = df["time"].min()
             df["time"] = (df["time"] - min_value).dt.total_seconds()
             df = df.sort_values(by="time", ascending=True)
 
-            segment = df[["lat", "lon"]].to_numpy()
-            distance = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(segment=segment)
-            list_node = []
-            temp_rows = []
-            node_collector = NodeCollector()
-            c = 0
-            for i, dist in enumerate(distance):
-                if dist < 50:
-                    node = Node(
-                        node_id=len(list_node),
-                        lat=df.iloc[i]["lat"],
-                        lon=df.iloc[i]["lon"],
-                    )
-                    list_node.append(node)
-                    node_collector.add_node(node)
-                    temp_rows.append(df.iloc[i])
-                elif len(list_node) > 100:
-                    c = c + 1
-                    way = Way(way_id=len(list_node), nodes=list_node)
-                    way_collector = WayCollector()
-                    way_collector.add_way(way)
-                    writer = IOPs_geojson()
-                    writer.write_geojson(
-                        file_output_path=path / "geojson" / f"{name}_{c}.geojson",
-                        ways_collector=way_collector,
-                        nodes_collector=node_collector,
-                        list_print_points=list_node,
-                    )
+            chunk_size = 1000000  # Размер части
 
-                    # Создаём DataFrame из списка строк
-                    temp_df = pd.DataFrame(temp_rows)
-                    path_csv = path / "csv" / f"{name}_{c}.csv"
-                    temp_df.to_csv(path_csv, index=False)
-                    print(f"GeoJSON file created: {path / 'geojson' / f'{name}_{c}.geojson'}")
+            def split_dataframe(df, chunk_size):
+                """Генератор для разделения DataFrame на части."""
+                for start in range(0, len(df), chunk_size):
+                    yield df.iloc[start:start + chunk_size]
 
-                    list_node = []
-                    temp_rows = []  # Сбрасываем список строк
-                    node_collector = NodeCollector()
-                else:
-                    list_node = []
-                    temp_rows = []
-                    node_collector = NodeCollector()
+            for i, chunk in enumerate(split_dataframe(df, chunk_size)):
+                logging.info(f"Обработка части {i + 1}, размер: {len(chunk)}")
+                path = DefaultLocate.DATA_ANALYZED_DIR / f"{name}_part_{i + 1}"
+
+                min_time = chunk["time"].min()
+                chunk["time"] = chunk["time"] - min_time
+                chunk.to_csv(path.with_suffix(".csv"), index=False)
+                logging.info(f"Сохранен CSV файл: {path.with_suffix('.csv')}")
+
+                time_array = chunk["time"]
+                lat_array = chunk["lat"]
+                lon_array = chunk["lon"]
+
+                path = DefaultLocate.DATA_DIR / "output" / f"{name}_part_{i + 1}.geojson"
+                IOPs_geojson.write_geojson_from_arrays(
+                    output_path=path,
+                    list_arrays=[[time_array, lat_array, lon_array]],
+                )
+
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     ExtractingPaths.extract_data()

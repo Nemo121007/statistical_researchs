@@ -115,7 +115,7 @@ class T:
     def check_navigate():
         # # Читаем в storage полигоны из geojson
         storage = GeoObjectStorage()
-        path = Path(__file__).parent.parent / "data" / "output" / "test_unity.geojson"
+        # path = Path(__file__).parent.parent / "data" / "output" / "test_unity.geojson"
         nodes, ways, areas = IOPs_geojson().fast_read_json(path)
         storage.nodes_collector = nodes
         storage.ways_collector = ways
@@ -153,7 +153,7 @@ class T:
     @staticmethod
     def check():
         storage = GeoObjectStorage()
-        path = Path(__file__).parent.parent / "data" / "output" / "central-fed-district_merged.geojson"
+        # path = Path(__file__).parent.parent / "data" / "output" / "central-fed-district_merged.geojson"
         with open(path, "r", encoding="utf-8") as f:
             data: FeatureCollection = geojson.load(f)
 
