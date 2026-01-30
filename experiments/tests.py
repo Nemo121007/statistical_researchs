@@ -41,7 +41,7 @@ class T:
     @staticmethod
     def gps():
         """Тестовый запуск GPS утилит."""
-        path = Path(__file__).parent / "test_data" / "Дафна.csv"
+        path = Path(__file__).parent / "test_data" / "2"
         df = pd.read_csv(path, usecols=["time", "lat", "lon"], na_values=["", " ", "NULL", "null"])
         df["time_dt"] = pd.to_datetime(df["time"], errors="coerce")
         df = df.sort_values(by="time").reset_index(drop=True)
