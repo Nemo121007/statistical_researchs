@@ -1,23 +1,9 @@
 """Модуль для извлечения и обработки путей из CSV файлов."""
 import logging
-from pathlib import Path
-
-import numpy as np
 import pandas as pd
 
 from IOPs_geojson import IOPs_geojson
 from settings.settings import DefaultLocate
-from way_model import Way
-from node_model import Node
-from way_collector import (
-    WayCollector,
-)
-from node_collector import (
-    NodeCollector,
-)
-from calculator_distances_length_large_circle import (
-    CalculatorDistancesLengthLargeCircle,
-)
 
 
 class ExtractingPaths:
@@ -47,10 +33,14 @@ class ExtractingPaths:
 
             for i, chunk in enumerate(split_dataframe(df, chunk_size)):
                 logging.info(f"Обработка части {i + 1}, размер: {len(chunk)}")
-                path = DefaultLocate.DATA_ANALYZED_DIR / f"{name}_part_{i + 1}"
+                path = DefaultLocate.DATA_PREPROCESSED_DIR / f"{name}_part_{i + 1}"
 
                 min_time = chunk["time"].min()
+                chunk = chunk.copy()
                 chunk["time"] = chunk["time"] - min_time
+                chunk["time"] = chunk["time"].astype("Int64")
+                chunk["satellites"] = chunk["satellites"].astype("Int64")
+
                 chunk.to_csv(path.with_suffix(".csv"), index=False)
                 logging.info(f"Сохранен CSV файл: {path.with_suffix('.csv')}")
 
@@ -63,8 +53,6 @@ class ExtractingPaths:
                     output_path=path,
                     list_arrays=[[time_array, lat_array, lon_array]],
                 )
-
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
