@@ -36,7 +36,14 @@ class AreaCollector:
         if not isinstance(area, Area):
             raise TypeError("area должен быть типа Area")
         if area.id in self._areas:
-            logging.warning(f"Area с id {area.id} уже существует в коллекции. Он будет перезаписан")
+            # logging.warning(f"Area с id {area.id} уже существует в коллекции. Он будет перезаписан")
+            hash_a = hash(area.id)
+            while hash_a in self._areas:
+                hash_a = hash(area.id)
+            logging.warning(f"Area с id {area.id} уже существует в коллекции. "
+                            f"Он будет перезаписан. Хэш новой области: {hash_a}")
+            self._areas[hash_a] = area
+            return
         self._areas[area.id] = area
 
     def replace_area(self, old_area: Area, new_area: Area) -> None:

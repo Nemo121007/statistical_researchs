@@ -47,76 +47,60 @@ def load_csv(path: Path) -> pd.DataFrame:
 
 def write_distance(raw_df: pd.DataFrame, anonimize_df: pd.DataFrame, data_distance: list[tuple[datetime.datetime, float]]):
     """
-    Проставляет контрольные расстояния, пропуская NaN значения в raw_df.
+    1. Добавляет validity_point из anonimize_df в raw_df.
+    2. Проставляет control_distance в raw_df.
+    3. Сохраняет копию raw_df под названием 2_full.
+    4. Анонимизирует время и сохраняет под названием example.
     """
-    # 1. Приводим время к datetime
+
+    # --- Шаг 1: Подготовка данных и добавление validity_point ---
+
+    # Приводим время к datetime и сортируем raw_df
     raw_df['time'] = pd.to_datetime(raw_df['time'])
+    raw_df.sort_values(by='time', inplace=True, ignore_index=True)
 
-    # Создаем столбец control_distance
-    anonimize_df['control_distance'] = np.nan
+    raw_df["validate_point"] = anonimize_df["validity_point"]
 
-    # Определяем колонки для сопоставления (те, что есть в обоих df, исключая time и control_distance)
-    common_cols = list(set(raw_df.columns) & set(anonimize_df.columns))
-    cols_to_match = [col for col in common_cols if col not in ['time', 'control_distance']]
+    # Инициализируем столбец расстояний
+    raw_df['control_distance'] = np.nan
 
-    print(f"Колонки для поиска совпадений: {cols_to_match}")
-
-    # Предварительно считаем маску валидности данных для raw_df (нет NaN в ключевых полях)
-    # Это ускорит работу внутри цикла
-    raw_valid_mask = raw_df[cols_to_match].notna().all(axis=1)
-
+    # --- Шаг 2: Проставление расстояний ---
+    cum_distance_val = 0
     for item in data_distance:
-        # Проверка корректности входных данных
-        if len(item) < 2:
-            print(f"Предупреждение: Некорректный формат данных {item}. Пропуск.")
-            continue
-
         target_time, distance_val = item
+        cum_distance_val += distance_val
 
-        # 1. Ищем кандидатов по времени
+        # Ищем первую строку в raw_df, где время >= target_time И данные валидны
         time_mask = raw_df['time'] >= target_time
 
-        # 2. Комбинируем с маской валидности (время >= искомого И данные не NaN)
-        final_search_mask = time_mask & raw_valid_mask
-
-        if not final_search_mask.any():
-            print(f"Предупреждение: Не найдено валидных строк (без NaN) после времени {target_time} в raw_df.")
+        if not time_mask.any():
+            print(f"Предупреждение: Не найдено валидных строк после времени {target_time}.")
             continue
 
-        # Берем индекс первой подходящей строки
-        found_index = final_search_mask.idxmax()
-        found_row_raw = raw_df.loc[found_index]
+        found_index = time_mask.idxmax()
 
-        # 3. Ищем совпадение в anonimize_df по значениям
-        match_mask = pd.Series(True, index=anonimize_df.index)
+        # Записываем расстояние прямо в raw_df
+        raw_df.loc[found_index, 'control_distance'] = cum_distance_val
 
-        for col in cols_to_match:
-            # Сравниваем значения
-            match_mask &= (anonimize_df[col] == found_row_raw[col])
+    # --- Шаг 3: Сохранение полной версии (2_full) ---
+    path_full = DefaultLocate.DATA_POSTPROCESSED_DIR / "2_full.csv"
+    # Восстанавливаем исходный формат времени (строка) для сохранения, если нужно, или оставляем ISO
+    # Обычно при сохранении в CSV pandas сам приведет дату к строке.
+    raw_df.to_csv(path_full, index=True)
+    print(f"Файл 2_full успешно сохранен: {path_full}")
 
-        matched_rows = anonimize_df[match_mask]
+    # --- Шаг 4: Анонимизация и сохранение (example) ---
+    # Анонимизируем время: считаем секунды от первой записи
+    start_time = raw_df['time'].iloc[0]
+    raw_df['time'] = (raw_df['time'] - start_time).dt.total_seconds()
 
-        if matched_rows.empty:
-            # Если совпадения нет, выводим отладочную информацию
-            print(f"Ошибка: Не найдено совпадение в anonimize_df.")
-            print(f"Время поиска: {target_time}")
-            print(f"Найденная строка raw_df (index {found_index}): {found_row_raw[cols_to_match].to_dict()}")
-            # Можно раскомментировать raise, если нужно остановить выполнение
-            # raise ValueError("Данные не совпадают")
-            continue
+    path_example = DefaultLocate.DATA_POSTPROCESSED_DIR / "example.csv"
+    raw_df.to_csv(path_example, index=True)
+    print(f"Файл example успешно сохранен: {path_example}")
 
-        found_index_anon = matched_rows.index[0]
-
-        if len(matched_rows) > 1:
-            print(f"Предупреждение: Найдено несколько совпадений для времени {target_time}. Используется первое (индекс {found_index_anon}).")
-
-        # 4. Записываем расстояние
-        anonimize_df.loc[found_index_anon, 'control_distance'] = distance_val
-
-    # 5. Сохранение
-    output_path = DefaultLocate.DATA_POSTPROCESSED_DIR / "anonimize_result.csv"
-    anonimize_df.to_csv(output_path, index=True)
-    print(f"Файл успешно сохранен: {output_path}")
+    # --- Шаг 5: Вывод статистики ---
+    not_nan_count = raw_df['control_distance'].notna().sum()
+    print(f"\nКоличество строк в df example, у которых control_distance != NaN: {not_nan_count}")
 
 
 if __name__ == "__main__":
