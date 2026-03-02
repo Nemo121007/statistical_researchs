@@ -1,14 +1,13 @@
 from typing import List
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from pathlib import Path
-from pykalman import KalmanFilter
 
 from help_scripts.IOPs_geojson import IOPs_geojson
 from help_scripts.area_collector import AreaCollector
 from settings.settings import DefaultLocate
 from shapely.geometry import Point
+from tqdm import tqdm
 
 
 def load_csv(path: Path) -> pd.DataFrame:
@@ -23,7 +22,7 @@ def check_locate(data: pd.DataFrame, area_collector: AreaCollector) -> List[bool
     results = []
 
     # Итерируемся по строкам датафрейма
-    for _, row in data.iterrows():
+    for _, row in tqdm(data.iterrows(), total=len(data), desc="Проверка точек"):
         # Создаем объект Point (x=lon, y=lat)
         point = Point(row['lon'], row['lat'])
 
@@ -49,26 +48,8 @@ if __name__ == "__main__":
     df = load_csv(path)
     print(f"Загруженные данные из {path}:")
 
-    path = DefaultLocate.DATA_DIR / "Black_sea.geojson"
+    path = DefaultLocate.DATA_DIR / "europe_light.geojson"
     _, _, area_collector = IOPs_geojson.fast_read_json(path)
-    print(f"Загруженные данные из {path}:")
-
-    path = DefaultLocate.DATA_DIR / "Azov_sea.geojson"
-    _, _, area_collector_1 = IOPs_geojson.fast_read_json(path)
-    for area in area_collector_1.areas.values():
-        area_collector.add_area(area)
-    print(f"Загруженные данные из {path}:")
-
-    path = DefaultLocate.DATA_DIR / "south-fed-district.geojson"
-    _, _, area_collector_2 = IOPs_geojson.fast_read_json(path)
-    for area in area_collector_2.areas.values():
-        area_collector.add_area(area)
-    print(f"Загруженные данные из {path}:")
-
-    path = DefaultLocate.DATA_DIR / "volga-fed-district.geojson"
-    _, _, area_collector_3 = IOPs_geojson.fast_read_json(path)
-    for area in area_collector_3.areas.values():
-        area_collector.add_area(area)
     print(f"Загруженные данные из {path}:")
 
     # 3. Проверка вхождения

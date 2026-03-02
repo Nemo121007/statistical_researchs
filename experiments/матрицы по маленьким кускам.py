@@ -14,9 +14,12 @@ def load_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def discretize_df(df: pd.DataFrame, max_len_part: int) -> List[pd.DataFrame]:
+def discretize_df(df: pd.DataFrame, max_len_part: int, max_distance: float = 500.0) -> List[pd.DataFrame]:
     """
-    Разделяет DataFrame на список DataFrame на основе столбца validate_point и максимальной длины.
+    Разделяет DataFrame на список DataFrame на основе:
+    1. Смены validate_point
+    2. Расстояния между точками > max_distance
+    3. Максимальной длины сегмента max_len_part
     """
     if df.empty:
         return []
@@ -29,15 +32,27 @@ def discretize_df(df: pd.DataFrame, max_len_part: int) -> List[pd.DataFrame]:
     mask = (valid_groups != valid_groups.shift(1))
     group_ids = mask.cumsum()
 
-    # --- Шаг 2: Разбиение групп с учетом размера max_len_part ---
     df_list = []
+
+    # Итерируемся по группам, определенным сменой validate_point
     for _, group_df in df.groupby(group_ids):
-        if len(group_df) <= max_len_part:
-            df_list.append(group_df.reset_index(drop=True))
-        else:
-            for i in range(0, len(group_df), max_len_part):
-                chunk = group_df.iloc[i:i + max_len_part]
-                df_list.append(chunk.reset_index(drop=True))
+
+        # --- Шаг 2: Разбиение внутри группы по расстоянию ---
+        # Если расстояние > max_distance, считаем это разрывом трека.
+        # cumsum создаст новые подгруппы внутри текущей группы.
+        # (group_df['distance'] > max_distance) возвращает True/False.
+        # cumsum превратит их в числовые ID (0, 0, 0, 1, 1, 2...), где рост числа означает разрыв.
+        distance_splits = (group_df['distance'] > max_distance).cumsum()
+
+        for _, dist_group_df in group_df.groupby(distance_splits):
+
+            # --- Шаг 3: Разбиение полученных сегментов по длине (max_len_part) ---
+            if len(dist_group_df) <= max_len_part:
+                df_list.append(dist_group_df.reset_index(drop=True))
+            else:
+                for i in range(0, len(dist_group_df), max_len_part):
+                    chunk = dist_group_df.iloc[i:i + max_len_part]
+                    df_list.append(chunk.reset_index(drop=True))
 
     return df_list
 
@@ -45,36 +60,33 @@ def discretize_df(df: pd.DataFrame, max_len_part: int) -> List[pd.DataFrame]:
 def run_kalman_filter(data: np.ndarray, n_iter: int = 5):
     """
     Применяет EM-алгоритм и фильтр Калмана к данным.
-    Обрабатывает NaN и Inf значения.
     """
     # 1. Проверка на наличие данных
     if len(data) == 0:
         return None, None, None, None
 
-    # 2. Обработка NaN и Inf
-    # Заменяем все inf на nan, чтобы pykalman мог их обработать как пропуски
-    # Работаем с копией, чтобы не менять исходный массив (важно для графиков)
+    # 2. Подготовка данных
     data_clean = data.copy()
     data_clean[~np.isfinite(data_clean)] = np.nan
 
-    # Ищем строки, где нет NaN (после очистки это значит, что точка валидна)
     valid_mask = ~np.isnan(data_clean).any(axis=1)
     valid_indices = np.where(valid_mask)[0]
 
-    # Если в массиве вообще нет валидных точек
     if len(valid_indices) == 0:
         return None, None, None, None
 
-    # Находим первое валидное значение для инициализации начального состояния
     first_valid_idx = valid_indices[0]
     initial_state = data_clean[first_valid_idx]
 
-    # Инициализация параметров
+    # 3. Создаем Masked Array
+    masked_data = np.ma.masked_invalid(data_clean)
+
+    # 4. Инициализация параметров
     A_init = np.eye(2)
     Q_init = np.eye(2) * 0.1
     R_init = np.eye(2) * 0.1
 
-    # Инициализация модели
+    # 5. Инициализация модели
     kf = KalmanFilter(
         n_dim_obs=2,
         n_dim_state=2,
@@ -86,13 +98,13 @@ def run_kalman_filter(data: np.ndarray, n_iter: int = 5):
         observation_covariance=R_init
     )
 
-    # EM-алгоритм (передаем очищенные данные, где inf заменены на nan)
-    kf = kf.em(data_clean, n_iter=n_iter)
+    try:
+        kf = kf.em(masked_data, n_iter=n_iter)
+        smoothed_state_means, _ = kf.smooth(masked_data)
+        return kf.transition_matrices, kf.transition_covariance, kf.observation_covariance, smoothed_state_means
 
-    # Сглаживание
-    smoothed_state_means, _ = kf.smooth(data_clean)
-
-    return kf.transition_matrices, kf.transition_covariance, kf.observation_covariance, smoothed_state_means
+    except Exception as e:
+        return None, None, None, None
 
 
 def plot_results(smoothed_state_means: np.ndarray, data: np.ndarray, name_file: Path):
@@ -144,7 +156,7 @@ def calculate_matrix_stats(matrix_list: List[np.ndarray], name: str) -> str:
     return "\n".join(report_lines)
 
 
-def test_calman_filter(list_df: List[pd.DataFrame]):
+def test_calman_filter(list_df: List[pd.DataFrame], min_len: int = 30):
     """
     Основная функция тестирования фильтра Калмана с прогресс-баром.
     """
@@ -156,17 +168,25 @@ def test_calman_filter(list_df: List[pd.DataFrame]):
     text_log_false = ["Лог FALSE значений (validate_point = -1)"]
 
     counters = {'true': 0, 'false': 0}
+    skipped_count = 0  # Счетчик пропущенных участков
 
     pict_dir = DefaultLocate.DATA_DIR / "pict"
     pict_dir.mkdir(parents=True, exist_ok=True)
 
     # 2. Цикл по элементам с прогресс-баром
-    # Добавляем tqdm для визуализации
     pbar = tqdm(enumerate(list_df), total=len(list_df), desc="Анализ чанков", unit="chunk")
 
     for i, df in pbar:
         if df.empty:
             continue
+
+        # --- ПРОВЕРКА НА МИНИМАЛЬНОЕ КОЛИЧЕСТВО ТОЧЕК ---
+        df_clean = df.dropna(subset=['lon', 'lat'])
+
+        if len(df_clean) < min_len:
+            skipped_count += 1
+            continue
+        # -----------------------------------------------
 
         val_point = df['validate_point'].iloc[0]
 
@@ -185,10 +205,9 @@ def test_calman_filter(list_df: List[pd.DataFrame]):
         else:
             continue
 
-        # Обновляем описание прогресс-бара динамически
-        pbar.set_postfix_str(f"Type={log_type}, Idx={current_idx}")
+        pbar.set_postfix_str(f"Type={log_type}, Idx={current_idx}, Skipped={skipped_count}")
 
-        data = df[['lon', 'lat']].values
+        data = df_clean[['lon', 'lat']].values
 
         try:
             A_est, Q_est, R_est, smoothed = run_kalman_filter(data)
@@ -212,7 +231,6 @@ def test_calman_filter(list_df: List[pd.DataFrame]):
             plot_results(smoothed, data, plot_filename)
 
         except Exception as e:
-            # Используем pbar.write чтобы не ломать вывод прогресс-бара
             pbar.write(f"Ошибка при обработке chunk #{i} ({log_type}): {e}")
             continue
 
@@ -241,16 +259,19 @@ def test_calman_filter(list_df: List[pd.DataFrame]):
 
     print(f"\nАнализ завершен. Логи сохранены в: {save_dir}")
     print(f"Графики сохранены в: {pict_dir}")
+    print(f"Пропущено участков (менее {min_len} точек): {skipped_count}")
 
 
 if __name__ == '__main__':
-    path = DefaultLocate.DATA_POSTPROCESSED_DIR / "example.csv"
+    path = DefaultLocate.DATA_POSTPROCESSED_DIR / "example_cleaned.csv"
 
     if not path.exists():
         print(f"Файл не найден: {path}")
     else:
         df = load_csv(path)
-        df_list = discretize_df(df, max_len_part=100)
+
+        # Передаем max_distance=500 в функцию разбиения
+        df_list = discretize_df(df, max_len_part=500, max_distance=500)
 
         print(f"Всего частей: {len(df_list)}")
         if df_list:

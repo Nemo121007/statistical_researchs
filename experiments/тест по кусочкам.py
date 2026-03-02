@@ -4,6 +4,7 @@ import datetime
 from pathlib import Path
 
 from help_scripts.IOPs_geojson import IOPs_geojson
+from help_scripts.calculator_distances_length_large_circle import CalculatorDistancesLengthLargeCircle
 from settings.settings import DefaultLocate
 
 
@@ -77,13 +78,52 @@ def discretize_path(df: pd.DataFrame, count_max_len: int):
 
 
 if __name__ == "__main__":
-    name = "2_part_1.csv"
-    df = load_csv(name)
+    # name = "2_part_1.csv"
+    # df = load_csv(name)
+    #
+    # # Вызываем функцию разделения
+    # parts = discretize_path(df, count_max_len=0)
+    #
+    # print(f"\nПолучено частей: {len(parts)}")
+    # for i, part in enumerate(parts):
+    #     print(f"\nЧасть {i + 1}:")
+    #     print(part[['time', 'validity_point']])
 
-    # Вызываем функцию разделения
-    parts = discretize_path(df, count_max_len=0)
+    # Загрузка данных
+    path = DefaultLocate.DATA_POSTPROCESSED_DIR / "example_located.csv"
+    df = pd.read_csv(path)
+    print(f"Загруженные данные из {path}: {len(df)} строк")
 
-    print(f"\nПолучено частей: {len(parts)}")
-    for i, part in enumerate(parts):
-        print(f"\nЧасть {i + 1}:")
-        print(part[['time', 'validity_point']])
+    # --- Условие 1: satellites < 2 ---
+    # Заменяем lat, lon на NaN, validate_point на -1
+    mask_satellites = df['satellites'] < 2
+
+    df.loc[mask_satellites, 'lat'] = np.nan
+    df.loc[mask_satellites, 'lon'] = np.nan
+    df.loc[mask_satellites, 'validate_point'] = -1
+
+    # --- Условие 2: in_water = False и validate_point = 1 ---
+    # Заменяем lat, lon на NaN, validate_point на -1
+    mask_land = df['in_water'] == False
+
+    df.loc[mask_land, 'lat'] = np.nan
+    df.loc[mask_land, 'lon'] = np.nan
+    df.loc[mask_land, 'validate_point'] = -1
+
+    distance = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+        lat_array=df['lat'].to_numpy(),
+        lon_array=df['lon'].to_numpy(),
+    )
+    distance = np.concatenate(([0], distance))
+    df['distance'] = distance
+
+    # Сохранение результатов в новом файле
+    output_path = DefaultLocate.DATA_POSTPROCESSED_DIR / "example_cleaned.csv"
+    df.to_csv(output_path, index=True)
+
+    print(f"Обработка завершена. Файл сохранен: {output_path}")
+    print(f"Статистика изменений:")
+    print(f"  Точек с satellites < 2 (статус -1): {mask_satellites.sum()}")
+    print(f"  Точек на суше (статус -1): {mask_land.sum()}")
+    print(f"  Всего точек с статусом -1: {(mask_satellites | mask_land).sum()}")
+    print(f"  Всего валидных точек (статус != -1): {len(df) - (mask_satellites | mask_land).sum()}")
