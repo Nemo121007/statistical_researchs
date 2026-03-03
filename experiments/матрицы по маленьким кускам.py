@@ -156,7 +156,7 @@ def calculate_matrix_stats(matrix_list: List[np.ndarray], name: str) -> str:
     return "\n".join(report_lines)
 
 
-def test_calman_filter(list_df: List[pd.DataFrame], min_len: int = 30):
+def test_calman_filter(list_df: List[pd.DataFrame], min_len: int = 30, m: int = 10):
     """
     Основная функция тестирования фильтра Калмана с прогресс-баром.
     """
@@ -209,8 +209,11 @@ def test_calman_filter(list_df: List[pd.DataFrame], min_len: int = 30):
 
         data = df_clean[['lon', 'lat']].values
 
+        # Прореживание: берём каждую m-ю точку
+        data_sampled = data[::m]
+
         try:
-            A_est, Q_est, R_est, smoothed = run_kalman_filter(data)
+            A_est, Q_est, R_est, smoothed = run_kalman_filter(data_sampled)
 
             if A_est is None:
                 continue
