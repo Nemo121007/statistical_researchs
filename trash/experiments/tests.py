@@ -2,37 +2,41 @@
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from pyexpat import features
 from typing import List
-from pathlib import Path
 
 import geojson
 import numpy as np
 import pandas as pd
-from geojson import FeatureCollection, Feature, LineString, Point
-
-from application.business_layer.db_access.sql_reader_postgres import SqlReaderPostgresResource
+from application.business_layer.db_access.sql_reader_postgres import (
+    SqlReaderPostgresResource,
+)
 from application.modules.bg_services.gps.core import Logger
-from application.modules.bg_services.gps.core.config import CorrectorSettings, Config
-from application.modules.bg_services.gps.corrector.tracker.collectors.area_collector import AreaCollector
-from application.modules.bg_services.gps.corrector.tracker.shared_files.calculator_distances_length_large_circle import \
-    CalculatorDistancesLengthLargeCircle
-from application.modules.bg_services.gps.utils.IOPs.IOPs_geojson import IOPs_geojson
-from application.modules.bg_services.gps.corrector.tracker.models.way_model import Way
-from application.modules.bg_services.gps.corrector.tracker.models.node_model import Node
-from application.modules.bg_services.gps.corrector.tracker.trackers.GPS_tracker import (
-    GPS_tracker,
-)
-from application.modules.bg_services.gps.corrector.tracker.collectors.way_collector import (
-    WayCollector,
-)
-from application.modules.bg_services.gps.corrector.tracker.collectors.node_collector import (
-    NodeCollector,
+from application.modules.bg_services.gps.core.config import Config, CorrectorSettings
+from application.modules.bg_services.gps.corrector.tracker.collectors.area_collector import (
+    AreaCollector,
 )
 from application.modules.bg_services.gps.corrector.tracker.collectors.geo_object_storage import (
     GeoObjectStorage,
 )
+from application.modules.bg_services.gps.corrector.tracker.collectors.node_collector import (
+    NodeCollector,
+)
+from application.modules.bg_services.gps.corrector.tracker.collectors.way_collector import (
+    WayCollector,
+)
+from application.modules.bg_services.gps.corrector.tracker.models.node_model import Node
+from application.modules.bg_services.gps.corrector.tracker.models.way_model import Way
+from application.modules.bg_services.gps.corrector.tracker.shared_files.calculator_distances_length_large_circle import (
+    CalculatorDistancesLengthLargeCircle,
+)
+from application.modules.bg_services.gps.corrector.tracker.trackers.GPS_tracker import (
+    GPS_tracker,
+)
+from application.modules.bg_services.gps.utils.IOPs.IOPs_geojson import IOPs_geojson
 from application.modules.bg_services.gps.utils.settings import DefaultLocate
+from geojson import Feature, FeatureCollection, LineString, Point
 
 
 class T:
@@ -42,7 +46,9 @@ class T:
     def gps():
         """Тестовый запуск GPS утилит."""
         path = Path(__file__).parent / "test_data" / "2"
-        df = pd.read_csv(path, usecols=["time", "lat", "lon"], na_values=["", " ", "NULL", "null"])
+        df = pd.read_csv(
+            path, usecols=["time", "lat", "lon"], na_values=["", " ", "NULL", "null"]
+        )
         df["time_dt"] = pd.to_datetime(df["time"], errors="coerce")
         df = df.sort_values(by="time").reset_index(drop=True)
         df = df.iloc[40:].reset_index(drop=True)
@@ -59,7 +65,9 @@ class T:
             output_path=DefaultLocate.OUTPUT_DIR / "output_1.geojson",
             list_arrays=[[time_array, lat_array, lon_array]],
         )
-        logging.info(f"Исходных точек: {len(time_array)}. Файл  {DefaultLocate.OUTPUT_DIR / 'output_1.geojson'} создан.")
+        logging.info(
+            f"Исходных точек: {len(time_array)}. Файл  {DefaultLocate.OUTPUT_DIR / 'output_1.geojson'} создан."
+        )
 
         # # Читаем в storage полигоны из geojson
         storage = GeoObjectStorage()
@@ -75,12 +83,12 @@ class T:
 
             # Загружаем хранилище в трекер
             gps_tracker = GPS_tracker(
-                    times=time_array,
-                    lats=lat_array,
-                    lons=lon_array,
-                    geo_object_storage=storage,
-                    # sql_reader=sql_reader
-                )
+                times=time_array,
+                lats=lat_array,
+                lons=lon_array,
+                geo_object_storage=storage,
+                # sql_reader=sql_reader
+            )
 
         # area = storage.area_collector.get_area(4230)
         # a = area.shapely_polygon.area
@@ -98,7 +106,9 @@ class T:
             output_path=DefaultLocate.OUTPUT_DIR / "output_2.geojson",
             list_arrays=[[time_raw, lat_raw, lon_raw]],
         )
-        logging.info(f"После фильтрации по скорости точек: {len(time_raw)}. Файл  {DefaultLocate.OUTPUT_DIR / 'output_2.geojson'} создан.")
+        logging.info(
+            f"После фильтрации по скорости точек: {len(time_raw)}. Файл  {DefaultLocate.OUTPUT_DIR / 'output_2.geojson'} создан."
+        )
 
         time_array, lat_array, lon_array, _ = gps_tracker.filter_track(
             distance_threshold=500.0,
@@ -109,7 +119,9 @@ class T:
             output_path=DefaultLocate.OUTPUT_DIR / "output_3.geojson",
             list_arrays=[[time_array, lat_array, lon_array]],
         )
-        logging.info(f"После фильтрации по расстоянию точек: {len(time_array)}. Файл  {DefaultLocate.OUTPUT_DIR / 'output_3.geojson'} создан.")
+        logging.info(
+            f"После фильтрации по расстоянию точек: {len(time_array)}. Файл  {DefaultLocate.OUTPUT_DIR / 'output_3.geojson'} создан."
+        )
 
     @staticmethod
     def check_navigate():
@@ -147,7 +159,11 @@ class T:
         way_collector = WayCollector()
         way_collector.add_way(way)
         path = DefaultLocate.OUTPUT_DIR / "navigate_output.geojson"
-        IOPs_geojson.write_geojson(file_output_path=path, ways_collector=way_collector, list_print_points=list_nodes)
+        IOPs_geojson.write_geojson(
+            file_output_path=path,
+            ways_collector=way_collector,
+            list_print_points=list_nodes,
+        )
         pass
 
     @staticmethod
@@ -179,18 +195,12 @@ class T:
         ) as f:
             geojson.dump(feature_collection, f, ensure_ascii=False, indent=2)
 
-
     @staticmethod
     def check_polygon():
         config = Config.load()
         sync_db_dsn = config.sync_db_settings.dsn.model_dump()
         with SqlReaderPostgresResource(sync_db_dsn) as sql_reader:
-            a = GPS_tracker(
-                times=[],
-                lats=[],
-                lons=[],
-                sql_reader=sql_reader
-            )
+            a = GPS_tracker(times=[], lats=[], lons=[], sql_reader=sql_reader)
             # 47.126205, 39.330891
             features = a._get_all_object_from_bounding_box(
                 max_lat=90.0,

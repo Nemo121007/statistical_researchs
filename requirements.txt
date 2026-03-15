@@ -9,3 +9,7 @@ geopy>=2.4.0
 
 tqdm>=4.66.0
 pykalman>=0.9.7
+
+black>=23.3.0
+pylint>=2.15.0
+isort>=8.0.1

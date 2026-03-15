@@ -1,13 +1,13 @@
-import pandas as pd
-import numpy as np
 import datetime
-from pandas.core.interchange.dataframe_protocol import DataFrame
-
-from help_scripts.IOPs_geojson import IOPs_geojson
-from settings.settings import DefaultLocate
-from geopy.distance import geodesic
-from geomag.geomag import GeoMag
 import math
+
+import numpy as np
+import pandas as pd
+from geomag.geomag import GeoMag
+from geopy.distance import geodesic
+from help_scripts.IOPs_geojson import IOPs_geojson
+from pandas.core.interchange.dataframe_protocol import DataFrame
+from settings.settings import DefaultLocate
 
 # Инициализируем модели один раз для эффективности
 gm = GeoMag()
@@ -45,36 +45,38 @@ def speed_comparison(df: DataFrame, name: str):
         np.radians(df["lat"].shift(1)),
         np.radians(df["lon"].shift(1)),
         np.radians(df["lat"]),
-        np.radians(df["lon"])
+        np.radians(df["lon"]),
     )
     df["speed_haversine"] = df["distance_haversine"] / df["diff_time"]
 
     # --- ПОДГОТОВКА ДАННЫХ ДЛЯ СТАТИСТИКИ ---
     df["speed_haversine"] = df["speed_haversine"].replace([np.inf, -np.inf], np.nan)
-    df.rename(columns={'speed': 'speed_true'}, inplace=True)
-    df['speed_diff'] = df['speed_true'] - df['speed_haversine']
+    df.rename(columns={"speed": "speed_true"}, inplace=True)
+    df["speed_diff"] = df["speed_true"] - df["speed_haversine"]
 
-    stats_df = df[['speed_haversine', 'speed_diff']].dropna()
+    stats_df = df[["speed_haversine", "speed_diff"]].dropna()
     valid_points_count = len(stats_df)
 
     if valid_points_count == 0:
-        print(f"Пропускаем файл {name}, так как нет валидных точек для анализа скорости.")
+        print(
+            f"Пропускаем файл {name}, так как нет валидных точек для анализа скорости."
+        )
         return
 
     # --- ВЫЧИСЛЕНИЕ СТАТИСТИК (ИСПРАВЛЕНО) ---
     result = {}
-    result['valid_points_count'] = valid_points_count
+    result["valid_points_count"] = valid_points_count
 
-    for col_name in ['speed_haversine', 'speed_diff']:
-        prefix = 'speed_derived' if col_name == 'speed_haversine' else 'speed_diff'
+    for col_name in ["speed_haversine", "speed_diff"]:
+        prefix = "speed_derived" if col_name == "speed_haversine" else "speed_diff"
 
         # Эта часть теперь выполняется для обеих колонок
-        result[f'{prefix}_mean_mps'] = stats_df[col_name].mean()
-        result[f'{prefix}_min_mps'] = stats_df[col_name].min()
-        result[f'{prefix}_max_mps'] = stats_df[col_name].max()
+        result[f"{prefix}_mean_mps"] = stats_df[col_name].mean()
+        result[f"{prefix}_min_mps"] = stats_df[col_name].min()
+        result[f"{prefix}_max_mps"] = stats_df[col_name].max()
 
         for p in [25, 50, 75, 90, 95]:
-            result[f'{prefix}_{p}p_mps'] = stats_df[col_name].quantile(p / 100.0)
+            result[f"{prefix}_{p}p_mps"] = stats_df[col_name].quantile(p / 100.0)
 
     result_df = pd.DataFrame([result])
     print(f"\n--- Итоговые результаты по скорости для {name} ---")
@@ -93,50 +95,57 @@ def source_comparison(df: DataFrame, name: str):
     data = datetime.datetime(year=2025, month=6, day=1)
 
     # --- РАСЧЕТ АЗИМУТОВ ---
-    lat1 = df['lat'].shift(1)
-    lon1 = df['lon'].shift(1)
-    lat2 = df['lat']
-    lon2 = df['lon']
+    lat1 = df["lat"].shift(1)
+    lon1 = df["lon"].shift(1)
+    lat2 = df["lat"]
+    lon2 = df["lon"]
 
-    pairs_df = pd.DataFrame({
-        'lat1': lat1[1:], 'lon1': lon1[1:],
-        'lat2': lat2[1:], 'lon2': lon2[1:]
-    }).dropna()
+    pairs_df = pd.DataFrame(
+        {"lat1": lat1[1:], "lon1": lon1[1:], "lat2": lat2[1:], "lon2": lon2[1:]}
+    ).dropna()
 
     geographic_azimuths = []
     magnetic_azimuths = []
 
     for index, row in pairs_df.iterrows():
-        if pd.isna(row[['lat1', 'lon1', 'lat2', 'lon2']]).any():
+        if pd.isna(row[["lat1", "lon1", "lat2", "lon2"]]).any():
             geographic_azimuths.append(np.nan)
             magnetic_azimuths.append(np.nan)
             continue
 
-        inverse_result = g.geod.Inverse(row['lat1'], row['lon1'], row['lat2'], row['lon2'])
-        geo_azimuth = (inverse_result['azi1'] + 360) % 360
+        inverse_result = g.geod.Inverse(
+            row["lat1"], row["lon1"], row["lat2"], row["lon2"]
+        )
+        geo_azimuth = (inverse_result["azi1"] + 360) % 360
         geographic_azimuths.append(geo_azimuth)
 
         try:
-            mag_result = gm.GeoMag(dlat=row['lat1'], dlon=row['lon1'], h=0, time=data.date())
+            mag_result = gm.GeoMag(
+                dlat=row["lat1"], dlon=row["lon1"], h=0, time=data.date()
+            )
             declination = mag_result.dec
             magnetic_azimuth = (geo_azimuth - declination + 360) % 360
             magnetic_azimuths.append(magnetic_azimuth)
         except Exception as e:
-            print(f"Не удалось рассчитать магнитное склонение для точки ({row['lat1']}, {row['lon1']}): {e}")
+            print(
+                f"Не удалось рассчитать магнитное склонение для точки ({row['lat1']}, {row['lon1']}): {e}"
+            )
             magnetic_azimuths.append(np.nan)
 
     # --- ПРИСВАИВАНИЕ И РАСЧЕТ СТАТИСТИК ---
-    temp_azimuth_df = pd.DataFrame({
-        'geographic_azimuth': geographic_azimuths,
-        'magnetic_azimuth': magnetic_azimuths
-    })
+    temp_azimuth_df = pd.DataFrame(
+        {
+            "geographic_azimuth": geographic_azimuths,
+            "magnetic_azimuth": magnetic_azimuths,
+        }
+    )
     temp_azimuth_df.index = pairs_df.index
-    df = df.join(temp_azimuth_df, how='left')
+    df = df.join(temp_azimuth_df, how="left")
 
-    df['geo_diff'] = (df['heading'] - df['geographic_azimuth'] + 180) % 360 - 180
-    df['mag_diff'] = (df['heading'] - df['magnetic_azimuth'] + 180) % 360 - 180
+    df["geo_diff"] = (df["heading"] - df["geographic_azimuth"] + 180) % 360 - 180
+    df["mag_diff"] = (df["heading"] - df["magnetic_azimuth"] + 180) % 360 - 180
 
-    stats_df = df[['geo_diff', 'mag_diff']].dropna()
+    stats_df = df[["geo_diff", "mag_diff"]].dropna()
     valid_points_count = len(stats_df)
 
     if valid_points_count == 0:
@@ -146,16 +155,16 @@ def source_comparison(df: DataFrame, name: str):
     # --- ВЫЧИСЛЕНИЕ СТАТИСТИК (ИСПРАВЛЕНО) ---
     temp_result = {}
     # Добавляем имя файла в результат для корректного сохранения
-    temp_result['filename'] = name
-    temp_result['valid_points_count'] = valid_points_count
+    temp_result["filename"] = name
+    temp_result["valid_points_count"] = valid_points_count
 
-    for col_name in ['geo_diff', 'mag_diff']:
-        prefix = 'geographic' if 'geo' in col_name else 'magnetic'
-        temp_result[f'{prefix}_diff_mean'] = stats_df[col_name].mean()
-        temp_result[f'{prefix}_diff_min'] = stats_df[col_name].min()
-        temp_result[f'{prefix}_diff_max'] = stats_df[col_name].max()
+    for col_name in ["geo_diff", "mag_diff"]:
+        prefix = "geographic" if "geo" in col_name else "magnetic"
+        temp_result[f"{prefix}_diff_mean"] = stats_df[col_name].mean()
+        temp_result[f"{prefix}_diff_min"] = stats_df[col_name].min()
+        temp_result[f"{prefix}_diff_max"] = stats_df[col_name].max()
         for p in [25, 50, 75, 90, 95]:
-            temp_result[f'{prefix}_{p}p'] = stats_df[col_name].quantile(p / 100.0)
+            temp_result[f"{prefix}_{p}p"] = stats_df[col_name].quantile(p / 100.0)
 
     result_df = pd.DataFrame([temp_result])
     print(f"\n--- Итоговые результаты по разнице курсов для {name} ---")
@@ -173,11 +182,19 @@ def main():
     mark_time_true = (27789404, 27848806)
     mark_time_anomaly = (27778143, 27789404)
 
-    df_true = df[(df["time"] >= mark_time_true[0]) & (df["time"] <= mark_time_true[1])].copy()
-    df_anomaly = df[(df["time"] >= mark_time_anomaly[0]) & (df["time"] <= mark_time_anomaly[1])].copy()
+    df_true = df[
+        (df["time"] >= mark_time_true[0]) & (df["time"] <= mark_time_true[1])
+    ].copy()
+    df_anomaly = df[
+        (df["time"] >= mark_time_anomaly[0]) & (df["time"] <= mark_time_anomaly[1])
+    ].copy()
 
     time_true, lon_true, lat_true = df_true["time"], df_true["lat"], df_true["lon"]
-    time_anomaly, lat_anomaly, lon_anomaly = df_anomaly["time"], df_anomaly["lon"], df_anomaly["lat"]
+    time_anomaly, lat_anomaly, lon_anomaly = (
+        df_anomaly["time"],
+        df_anomaly["lon"],
+        df_anomaly["lat"],
+    )
 
     path = DefaultLocate.OUTPUT_DIR
     IOPs_geojson.write_geojson_from_arrays(
@@ -196,5 +213,5 @@ def main():
     source_comparison(df_anomaly, "anomaly_positions")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

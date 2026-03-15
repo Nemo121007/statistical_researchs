@@ -1,5 +1,6 @@
 import os
 
+
 # TODO fix
 class CorrectorSettings:
     """
@@ -29,6 +30,7 @@ class CorrectorSettings:
         max_step_area_increase: Максимальный размер увеличения bounding box (в градусах)
         min_step_area_increase: Минимальный размер увеличения bounding box (в градусах)
     """
+
     # Радиус Земли в метрах
     Earth_radius_meters: float = 6371000
 

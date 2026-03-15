@@ -1,10 +1,10 @@
-from typing import List
-import pandas as pd
-import numpy as np
 from pathlib import Path
+from typing import List
 
-from help_scripts.IOPs_geojson import IOPs_geojson
+import numpy as np
+import pandas as pd
 from help_scripts.area_collector import AreaCollector
+from help_scripts.IOPs_geojson import IOPs_geojson
 from settings.settings import DefaultLocate
 from shapely.geometry import Point
 from tqdm import tqdm
@@ -24,11 +24,14 @@ def check_locate(data: pd.DataFrame, area_collector: AreaCollector) -> List[bool
     # Итерируемся по строкам датафрейма
     for _, row in tqdm(data.iterrows(), total=len(data), desc="Проверка точек"):
         # Создаем объект Point (x=lon, y=lat)
-        point = Point(row['lon'], row['lat'])
+        point = Point(row["lon"], row["lat"])
 
         # Получаем кандидатов по bounding box (предварительная фильтрация)
         list_area = area_collector.get_areas_by_bounding_box(
-            min_lon=row["lon"], max_lon=row["lon"], min_lat=row["lat"], max_lat=row["lat"]
+            min_lon=row["lon"],
+            max_lon=row["lon"],
+            min_lat=row["lat"],
+            max_lat=row["lat"],
         )
 
         is_inside = False
@@ -56,10 +59,10 @@ if __name__ == "__main__":
     print("Начинаю проверку вхождения точек...")
     mask_inside_polygon = check_locate(df, area_collector)
 
-    df['in_water'] = mask_inside_polygon
+    df["in_water"] = mask_inside_polygon
 
     # 4. Статистика
-    count_inside = df['in_water'].sum()
+    count_inside = df["in_water"].sum()
     print(f"Количество точек, расположенных внутри area: {count_inside} из {len(df)}")
 
     # 5. Сохранение результата

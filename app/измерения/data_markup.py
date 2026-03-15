@@ -4,13 +4,14 @@ from settings.settings import DefaultLocate
 
 name = "2_part_1.csv"
 
+
 def get_mask_from_segments(df, segments, column_name="time"):
     """
     Вспомогательная функция для создания маски по интервалам.
     """
     if not segments:
         return pd.Series(False, index=df.index)
-    
+
     mask = pd.Series(False, index=df.index)
     for start, end in segments:
         mask |= (df[column_name] >= start) & (df[column_name] <= end)
@@ -25,7 +26,10 @@ def main():
 
     # 1 список: интервалы идентификаторов, которые необходимо вывести в json (область интереса)
     list_output_segments = [
-        (85 * 100 * 1000, 90 * 100 * 1000),     # Пример: весь диапазон или конкретные участки
+        (
+            40 * 100 * 1000,
+            50 * 100 * 1000,
+        ),  # Пример: весь диапазон или конкретные участки
     ]
 
     # 2 список: интервалы идентификаторов валидных точек
@@ -187,7 +191,7 @@ def main():
     mask_has_coords = ~(df["lat"].isna() | df["lon"].isna())
 
     # --- 3. Логика заполнения столбца validity_point ---
-    
+
     # Изначально заполняем -1 (невалидные)
     df["validity_point"] = -1
 
@@ -199,7 +203,7 @@ def main():
 
     # --- 4. Запись модифицированного CSV ---
     # Сохраняем ПОЛНЫЙ датафрейм (копию исходного) с добавленным столбцом validity_point
-    
+
     path_csv = DefaultLocate.DATA_POSTPROCESSED_DIR / name
     df.to_csv(path_csv, index=False)
     print(f"CSV сохранен: {path_csv}")
@@ -215,9 +219,13 @@ def main():
         path_gj1 = DefaultLocate.OUTPUT_DIR / "valid_points_intersection.geojson"
         IOPs_geojson.write_geojson_from_arrays(
             output_path=path_gj1,
-            list_arrays=[[df_gj1["time"].values.tolist(), 
-                          df_gj1["lat"].values.tolist(), 
-                          df_gj1["lon"].values.tolist()]],
+            list_arrays=[
+                [
+                    df_gj1["time"].values.tolist(),
+                    df_gj1["lat"].values.tolist(),
+                    df_gj1["lon"].values.tolist(),
+                ]
+            ],
         )
         print(f"GeoJSON 1 (Валидные в рамках) сохранен: {path_gj1}")
     else:
@@ -225,18 +233,25 @@ def main():
 
     # GeoJSON 2: Все точки списка 1, за исключением тех, которые обозначены списком 2
     # Условие: (Попадает в Список 1) И (НЕ попадает в Список 2)
-    # Примечание: Точки с NaN координатами в GeoJSON не запишутся (отфильтруются dropna или проверкой mask_has_coords при необходимости)
-    
+    # Примечание: Точки с NaN координатами в GeoJSON не запишутся (отфильтруются dropna или
+    # проверкой mask_has_coords при необходимости)
+
     mask_gj2 = mask_output & ~mask_valid_segments
-    df_gj2 = df[mask_gj2].dropna(subset=['lat', 'lon']) # Убираем NaN, так как геометрия невозможна
+    df_gj2 = df[mask_gj2].dropna(
+        subset=["lat", "lon"]
+    )  # Убираем NaN, так как геометрия невозможна
 
     if not df_gj2.empty:
         path_gj2 = DefaultLocate.OUTPUT_DIR / "remainder_points.geojson"
         IOPs_geojson.write_geojson_from_arrays(
             output_path=path_gj2,
-            list_arrays=[[df_gj2["time"].values.tolist(), 
-                          df_gj2["lat"].values.tolist(),
-                          df_gj2["lon"].values.tolist()]],
+            list_arrays=[
+                [
+                    df_gj2["time"].values.tolist(),
+                    df_gj2["lat"].values.tolist(),
+                    df_gj2["lon"].values.tolist(),
+                ]
+            ],
         )
         print(f"GeoJSON 2 (Остальные точки) сохранен: {path_gj2}")
     else:

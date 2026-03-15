@@ -1,8 +1,8 @@
-import pandas as pd
-import numpy as np
 import datetime
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 from help_scripts.IOPs_geojson import IOPs_geojson
 from settings.settings import DefaultLocate
 
@@ -45,7 +45,11 @@ def load_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def write_distance(raw_df: pd.DataFrame, anonimize_df: pd.DataFrame, data_distance: list[tuple[datetime.datetime, float]]):
+def write_distance(
+    raw_df: pd.DataFrame,
+    anonimize_df: pd.DataFrame,
+    data_distance: list[tuple[datetime.datetime, float]],
+):
     """
     1. Добавляет validity_point из anonimize_df в raw_df.
     2. Проставляет control_distance в raw_df.
@@ -56,13 +60,13 @@ def write_distance(raw_df: pd.DataFrame, anonimize_df: pd.DataFrame, data_distan
     # --- Шаг 1: Подготовка данных и добавление validity_point ---
 
     # Приводим время к datetime и сортируем raw_df
-    raw_df['time'] = pd.to_datetime(raw_df['time'])
-    raw_df.sort_values(by='time', inplace=True, ignore_index=True)
+    raw_df["time"] = pd.to_datetime(raw_df["time"])
+    raw_df.sort_values(by="time", inplace=True, ignore_index=True)
 
     raw_df["validate_point"] = anonimize_df["validity_point"]
 
     # Инициализируем столбец расстояний
-    raw_df['control_distance'] = np.nan
+    raw_df["control_distance"] = np.nan
 
     # --- Шаг 2: Проставление расстояний ---
     cum_distance_val = 0
@@ -71,16 +75,18 @@ def write_distance(raw_df: pd.DataFrame, anonimize_df: pd.DataFrame, data_distan
         cum_distance_val += distance_val
 
         # Ищем первую строку в raw_df, где время >= target_time И данные валидны
-        time_mask = raw_df['time'] >= target_time
+        time_mask = raw_df["time"] >= target_time
 
         if not time_mask.any():
-            print(f"Предупреждение: Не найдено валидных строк после времени {target_time}.")
+            print(
+                f"Предупреждение: Не найдено валидных строк после времени {target_time}."
+            )
             continue
 
         found_index = time_mask.idxmax()
 
         # Записываем расстояние прямо в raw_df
-        raw_df.loc[found_index, 'control_distance'] = cum_distance_val
+        raw_df.loc[found_index, "control_distance"] = cum_distance_val
 
     # --- Шаг 3: Сохранение полной версии (2_full) ---
     path_full = DefaultLocate.DATA_POSTPROCESSED_DIR / "2_full.csv"
@@ -91,16 +97,18 @@ def write_distance(raw_df: pd.DataFrame, anonimize_df: pd.DataFrame, data_distan
 
     # --- Шаг 4: Анонимизация и сохранение (example) ---
     # Анонимизируем время: считаем секунды от первой записи
-    start_time = raw_df['time'].iloc[0]
-    raw_df['time'] = (raw_df['time'] - start_time).dt.total_seconds()
+    start_time = raw_df["time"].iloc[0]
+    raw_df["time"] = (raw_df["time"] - start_time).dt.total_seconds()
 
     path_example = DefaultLocate.DATA_POSTPROCESSED_DIR / "example.csv"
     raw_df.to_csv(path_example, index=True)
     print(f"Файл example успешно сохранен: {path_example}")
 
     # --- Шаг 5: Вывод статистики ---
-    not_nan_count = raw_df['control_distance'].notna().sum()
-    print(f"\nКоличество строк в df example, у которых control_distance != NaN: {not_nan_count}")
+    not_nan_count = raw_df["control_distance"].notna().sum()
+    print(
+        f"\nКоличество строк в df example, у которых control_distance != NaN: {not_nan_count}"
+    )
 
 
 if __name__ == "__main__":

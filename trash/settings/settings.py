@@ -1,5 +1,6 @@
 # pylint: disable=too-few-public-methods
 """Конфигурационные параметры для обработки водных путей."""
+
 from pathlib import Path
 
 
@@ -33,7 +34,6 @@ class DefaultLocate:
     DEFAULT_PATH_RECORD = RECORDS_DIR / "default_record.csv"
     DEFAULT_PATH_GEOJSON = GEOJSON_DIR / "default_geojson.geojson"
     DATA_PATH_DATAFILE = DATA_DIR / "default_csv.csv"
-
 
 
 class TagsOSM:
@@ -122,6 +122,7 @@ class TagsOSM:
         "tunnel": ["building_passage", "culvert", "yes"],
         # "" : [""],
     }
+
 
 if __name__ == "__main__":
     print(DefaultLocate.DATA_DIR)
