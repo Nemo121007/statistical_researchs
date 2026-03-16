@@ -3,6 +3,9 @@ from typing import Tuple, List
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+
+from app.help_scripts.calculator_distances_length_large_circle import CalculatorDistancesLengthLargeCircle
 
 LEN_LAT = 111132.0  # Длина одного градуса широты в метрах
 
@@ -18,7 +21,7 @@ def parce_df(df: pd.DataFrame) -> Tuple[List[pd.DataFrame], List[pd.DataFrame]]:
     return list_valid_df, list_invalid_df
 
 
-def _extend_intervals(df: pd.DataFrame, target_point: int = 1, n: int = 300) -> List[pd.DataFrame]:
+def _extend_intervals(df: pd.DataFrame, target_point: int = 1, n: int = 300, distance_threshold: float = 500) -> List[pd.DataFrame]:
     """
     Разбивает DataFrame на список непрерывных временных интервалов.
     Если длина интервала превышает n, он разбивается на части длиной не более n.
@@ -27,6 +30,8 @@ def _extend_intervals(df: pd.DataFrame, target_point: int = 1, n: int = 300) -> 
         df: DataFrame с колонкой 'time' и 'validate_point'.
         target_point: Значение для фильтрации колонки 'validate_point'.
         n: Максимальная длина датафрейма в выходном списке.
+        distance_threshold: Максимальное расстояние (в метрах) для включения точек в один интервал.
+        Если расстояние между точками меньше данного порога, интервал будет проигнорирован.
     Returns:
         Список DataFrame, каждый из которых представляет непрерывный временной интервал.
     """
@@ -52,8 +57,24 @@ def _extend_intervals(df: pd.DataFrame, target_point: int = 1, n: int = 300) -> 
         if len(group) > n:
             for i in range(0, len(group), n):
                 chunk = group.iloc[i:i + n]
+                lon, lat = get_lon_lat(chunk)
+                if len(lon) < 2:
+                    continue
+                lon = np.array([lon[0], lon[-1]])
+                lat = np.array([lat[0], lat[-1]])
+                distance = float(np.nansum(CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat, lon)))
+                if distance < distance_threshold:
+                    continue
                 result_list.append(chunk)
         else:
+            lon, lat = get_lon_lat(group)
+            if len(lon) < 2:
+                continue
+            lon = np.array([lon[0], lon[-1]])
+            lat = np.array([lat[0], lat[-1]])
+            distance = float(np.nansum(CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat, lon)))
+            if distance < distance_threshold:
+                continue
             result_list.append(group)
 
     return result_list
@@ -130,10 +151,6 @@ def _get_process_noise_matrix(dt: float, sigma_acc: float) -> np.ndarray:
     dt3 = dt ** 3
     dt4 = dt ** 4
 
-    # Блок для координаты x (и аналогично для y)
-    # [[dt^4/4, dt^3/2],
-    #  [dt^3/2, dt^2]]
-
     Q = np.zeros((4, 4))
 
     # Индексы: 0 - x, 1 - y, 2 - vx, 3 - vy
@@ -177,7 +194,6 @@ def kalman_filter_cv(x: np.ndarray, y: np.ndarray, time: np.ndarray,
     R = np.eye(2) * (sigma_meas ** 2)
 
     # Инициализация состояния X_state = [x, y, vx, vy]
-    # Используем X_state, чтобы не путать с входным массивом x
     X_state = np.array([x[0], y[0], 0.0, 0.0]).reshape(4, 1)
 
     # Инициализация ковариации ошибки P
@@ -231,9 +247,80 @@ def kalman_filter_cv(x: np.ndarray, y: np.ndarray, time: np.ndarray,
     return filtered_x, filtered_y
 
 
+def visualize_and_save(x_true: np.ndarray, y_true: np.ndarray,
+                       x_filt: np.ndarray, y_filt: np.ndarray,
+                       save_path: Path):
+    """
+    Строит и сохраняет график сравнения истинной и отфильтрованной траектории.
+    """
+    num_points = len(x_true)
+
+    plt.figure(figsize=(10, 8))
+
+    # plt.scatter(x_true, y_true, c='black', label=f'Исходные данные ({num_points} точек)', alpha=0.6, s=20)
+
+    # Рисуем исходные данные линией
+    plt.plot(x_true, y_true, c='blue', label=f'Исходные данные ({num_points} точек)', alpha=0.6)
+
+    # Рисуем траекторию фильтра линией
+    plt.plot(x_filt, y_filt, 'r--', label='Фильтр Калмана', linewidth=2)
+
+    plt.xlabel('X (метры)')
+    plt.ylabel('Y (метры)')
+    plt.title(f'Траектория: {save_path.stem} | Точек: {num_points}')
+    plt.legend()
+    plt.grid(True)
+    plt.axis('equal')  # Чтобы сохранить пропорции осей
+
+    # Сохраняем и закрываем фигуру
+    plt.savefig(save_path)
+    plt.close()
+
+
 if __name__ == '__main__':
-    path = Path(__file__).parent.parent.parent / 'data' / 'post_processing' / 'example.csv'
-    df = load_csv(path)
+    # Определение путей
+    project_root = Path(__file__).parent.parent.parent
+    data_path = project_root / 'data' / 'post_processing' / 'example.csv'
+
+    # Директории для сохранения картинок
+    pict_dir = project_root / 'data' / 'pict'
+    true_dir = pict_dir / 'true'
+    false_dir = pict_dir / 'false'
+
+    # Инициализация директорий
+    true_dir.mkdir(parents=True, exist_ok=True)
+    false_dir.mkdir(parents=True, exist_ok=True)
+
+    # Загрузка и парсинг
+    df = load_csv(data_path)
     list_valid_df, list_invalid_df = parce_df(df)
 
+    # Обработка валидных интервалов (true)
+    print(f"Обработка валидных интервалов: {len(list_valid_df)} шт.")
+    for i, v_df in enumerate(list_valid_df):
+        # if i > 10:
+        #     break
+        lon, lat = get_lon_lat(v_df)
+        x, y = convert_to_local_cartesian(lon, lat)
+        time = v_df['time'].to_numpy()
 
+        x_filt, y_filt = kalman_filter_cv(x, y, time, sigma_meas=1 * 2.4, sigma_acc=0.0001 * 0.04)
+
+        save_path = true_dir / f'track_{i}.png'
+        visualize_and_save(x, y, x_filt, y_filt, save_path)
+
+    # Обработка невалидных интервалов (false)
+    print(f"Обработка невалидных интервалов: {len(list_invalid_df)} шт.")
+    for i, iv_df in enumerate(list_invalid_df):
+        # if i > 10:
+        #     break
+        lon, lat = get_lon_lat(iv_df)
+        x, y = convert_to_local_cartesian(lon, lat)
+        time = iv_df['time'].to_numpy()
+
+        x_filt, y_filt = kalman_filter_cv(x, y, time, sigma_meas=1 * 2.4, sigma_acc=0.0001 * 0.04)
+
+        save_path = false_dir / f'track_{i}.png'
+        visualize_and_save(x, y, x_filt, y_filt, save_path)
+
+    print("Готово.")
