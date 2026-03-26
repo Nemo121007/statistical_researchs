@@ -24,9 +24,9 @@ class KalmanFilterRW:
         self.sigma_proc = sigma_proc
         self.sigma_meas = sigma_meas
 
-    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float]:
         """
-        Применяет фильтр Калмана к траектории.
+        Применяет фильтр Калмана к траектории и вычисляет логарифм правдоподобия.
 
         Args:
             x: Массив координат X (в метрах).
@@ -34,18 +34,18 @@ class KalmanFilterRW:
             time: Массив времени (в секундах).
 
         Returns:
-            Tuple[np.ndarray, np.ndarray]: Сглаженные координаты X и Y.
+            Tuple[np.ndarray, np.ndarray, float]: Сглаженные координаты X, Y и сумма логарифмов правдоподобия.
         """
         if len(x) < 2:
-            return x, y
+            return x, y, 0.0
 
         # Размерность вектора состояния (x, y)
         n_dim = 2
 
-        # Матрица перехода F = I (для Random Walk следующее положение равно текущему + шум)
+        # Матрица перехода F = I
         F = np.eye(n_dim)
 
-        # Матрица измерений H = I (измеряем положение напрямую)
+        # Матрица измерений H = I
         H = np.eye(n_dim)
 
         # Ковариация шума измерений R
@@ -65,35 +65,50 @@ class KalmanFilterRW:
 
         I = np.eye(n_dim)
 
+        # Переменная для накопления правдоподобия
+        total_log_likelihood = 0.0
+        log_2pi = np.log(2 * np.pi)
+        dim = 2  # Размерность измерения
+
         for k in range(1, len(time)):
             dt = time[k] - time[k - 1]
             if dt <= 0:
                 dt = 1e-5
 
             # --- Формирование матрицы шума процесса Q ---
-            # Используем зависимость от времени: Q = q * dt
-            # Это означает, что неопределенность положения растет со временем
             Q = np.eye(n_dim) * (self.sigma_proc ** 2 * dt)
 
             # --- Prediction (Этап предсказания) ---
-            # X_pred = F @ X_state (так как F=I, просто X_state)
             X_pred = F @ X_state
-
-            # P_pred = P + Q
             P_pred = P + Q
 
             # --- Update (Этап коррекции) ---
-            # Вектор измерений z = [x, y]
             z = np.array([x[k], y[k]]).reshape(n_dim, 1)
 
-            # Невязка (Innovation): y_err = z - X_pred
+            # Невязка (Innovation)
             y_err = z - (H @ X_pred)
 
-            # Ковариация невязки: S = P_pred + R
-            S = P_pred + R
+            # Ковариация невязки
+            S = H @ P_pred @ H.T + R
 
-            # Коэффициент усиления Калмана: K = P_pred * S^-1
-            K = P_pred @ np.linalg.inv(S)
+            # --- Вычисление P(y_k | y_(1:k-1)) ---
+            # Вычисляем только если матрица S корректна
+            det_S = np.linalg.det(S)
+            if det_S > 0:
+                S_inv = np.linalg.inv(S)
+                # Квадрат расстояния Махаланобиса
+                mahalanobis_dist = float(y_err.T @ S_inv @ y_err)
+
+                # Логарифм правдоподобия для шага k
+                step_log_likelihood = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
+                total_log_likelihood += step_log_likelihood
+
+            else:
+                # В случае вырожденной матрицы используем псевдообратный подход или пропускаем шаг
+                S_inv = np.linalg.pinv(S)
+
+            # Коэффициент усиления Калмана
+            K = P_pred @ S_inv
 
             # Обновление состояния
             X_state = X_pred + K @ y_err
@@ -104,7 +119,7 @@ class KalmanFilterRW:
             filtered_x[k] = X_state[0, 0]
             filtered_y[k] = X_state[1, 0]
 
-        return filtered_x, filtered_y
+        return filtered_x, filtered_y, total_log_likelihood
 
 
 def visualize_and_save(x_true: np.ndarray, y_true: np.ndarray,

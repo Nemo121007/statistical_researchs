@@ -49,12 +49,12 @@ class KalmanFilterCV:
 
         return Q * (self.sigma_acc ** 2)
 
-    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float]:
         """
-        Применяет фильтр Калмана к траектории.
+        Применяет фильтр Калмана и вычисляет логарифм правдоподобия.
         """
         if len(x) < 2:
-            return x, y
+            return x, y, 0.0
 
         H = np.array([[1, 0, 0, 0],
                       [0, 1, 0, 0]])
@@ -74,31 +74,56 @@ class KalmanFilterCV:
 
         I = np.eye(4)
 
+        # Переменная для накопления правдоподобия
+        total_log_likelihood = 0.0
+
+        # Константа для формулы (2 * pi)
+        log_2pi = np.log(2 * np.pi)
+        dim = 2  # Размерность измерения (x, y)
+
         for k in range(1, len(time)):
             dt = time[k] - time[k - 1]
             if dt <= 0:
                 dt = 1e-5
 
-            # Prediction
+            # --- Prediction ---
             F = self._get_transition_matrix(dt)
             Q = self._get_process_noise_matrix(dt)
 
             X_pred = F @ X_state
             P_pred = F @ P @ F.T + Q
 
-            # Update
+            # --- Update ---
             z = np.array([x[k], y[k]]).reshape(2, 1)
-            y_err = z - (H @ X_pred)
-            S = H @ P_pred @ H.T + R
-            K = P_pred @ H.T @ np.linalg.inv(S)
 
+            # Невязка (Innovation)
+            y_err = z - (H @ X_pred)
+
+            # Ковариация невязки (Innovation Covariance)
+            S = H @ P_pred @ H.T + R
+
+            # --- Вычисление P(y_k | y_(1:k-1)) ---
+            det_S = np.linalg.det(S)
+            # Используем логарифм для численной устойчивости
+            if det_S > 0:
+                S_inv = np.linalg.inv(S)
+                mahalanobis_dist = float(y_err.T @ S_inv @ y_err)
+                step_log_likelihood = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
+                total_log_likelihood += step_log_likelihood
+            else:
+                # Защита: если матрица вырождена, используем псевдообратную матрицу
+                # для продолжения фильтрации, но правдоподобие не считаем
+                S_inv = np.linalg.pinv(S)
+
+            # Остальной код обновления
+            K = P_pred @ H.T @ S_inv  # S_inv уже вычислен
             X_state = X_pred + K @ y_err
             P = (I - K @ H) @ P_pred
 
             filtered_x[k] = X_state[0, 0]
             filtered_y[k] = X_state[1, 0]
 
-        return filtered_x, filtered_y
+        return filtered_x, filtered_y, total_log_likelihood
 
 
 def visualize_and_save(x_true: np.ndarray, y_true: np.ndarray,
