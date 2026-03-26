@@ -5,7 +5,6 @@ import time
 import numpy as np
 import pandas as pd
 from geopy.distance import geodesic
-from settings.settings import DefaultLocate
 
 Earth_radius_meters: float = 6371000
 

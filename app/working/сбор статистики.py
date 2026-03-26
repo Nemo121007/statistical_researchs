@@ -4,7 +4,7 @@ import random  # Добавлен импорт
 
 import numpy as np
 
-from movement_model import load_csv, parce_df, get_lon_lat, convert_to_local_cartesian
+from kalman_filter_cv import load_csv, parce_df, get_lon_lat, convert_to_local_cartesian
 
 
 random.seed(42)
