@@ -3,27 +3,20 @@
 
 import json
 import logging
+from json import JSONDecodeError
 from pathlib import Path
 from typing import List, Tuple
-from json import JSONDecodeError
 
 import geojson
 import numpy as np
 from geojson import Feature
-from shapely.geometry import Polygon, LineString
-
-from help_scripts.way_model import Way
+from help_scripts.area_collector import AreaCollector
 from help_scripts.area_model import Area
+from help_scripts.node_collector import NodeCollector
 from help_scripts.node_model import Node
-from help_scripts.way_collector import (
-    WayCollector,
-)
-from help_scripts.area_collector import (
-    AreaCollector,
-)
-from help_scripts.node_collector import (
-    NodeCollector,
-)
+from help_scripts.way_collector import WayCollector
+from help_scripts.way_model import Way
+from shapely.geometry import LineString, Polygon
 
 
 class IOPs_geojson:
@@ -68,17 +61,23 @@ class IOPs_geojson:
         feature_collection = geojson.FeatureCollection([])
 
         if ways_collector:
-            list_features = IOPs_geojson._convert_way_collector_to_list_features(ways_collector)
+            list_features = IOPs_geojson._convert_way_collector_to_list_features(
+                ways_collector
+            )
             feature_collection.features.extend(list_features)
             logging.debug(f"Записано путей: {len(ways_collector.ways)}")
 
         if areas_collector:
-            list_features = IOPs_geojson._convert_area_collector_to_list_features(areas_collector)
+            list_features = IOPs_geojson._convert_area_collector_to_list_features(
+                areas_collector
+            )
             feature_collection.features.extend(list_features)
             logging.debug(f"Записано полигонов: {len(areas_collector.areas)}")
 
         if list_print_points:
-            list_features = IOPs_geojson._convert_list_point_to_list_features(list_print_points)
+            list_features = IOPs_geojson._convert_list_point_to_list_features(
+                list_print_points
+            )
             feature_collection.features.extend(list_features)
             logging.debug(f"Записано точек: {len(list_print_points)}")
 
@@ -89,7 +88,8 @@ class IOPs_geojson:
                 geojson.dump(feature_collection, f, ensure_ascii=False, indent=2)
 
             logging.info(
-                f"GeoJSON файл записан в {str(file_output_path)} " f"с {len(feature_collection.features)} объектами"
+                f"GeoJSON файл записан в {str(file_output_path)} "
+                f"с {len(feature_collection.features)} объектами"
             )
         except OSError as e:
             logging.error(f"Ошибка при записи GeoJSON файла: {str(e)}")
@@ -119,9 +119,7 @@ class IOPs_geojson:
                     Feature(
                         id=count_nodes,
                         geometry=geojson.Point((lon, lat)),
-                        properties={
-                            "time": str(time)
-                        },
+                        properties={"time": str(time)},
                     )
                 )
             features_collection.features.append(
@@ -133,8 +131,9 @@ class IOPs_geojson:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             geojson.dump(features_collection, f, ensure_ascii=False, indent=2)
-        logging.info(f"GeoJSON файл записан в {str(output_path)} с {len(features_collection.features)} объектами")
-
+        logging.info(
+            f"GeoJSON файл записан в {str(output_path)} с {len(features_collection.features)} объектами"
+        )
 
     @staticmethod
     def _convert_way_collector_to_list_features(
@@ -168,20 +167,28 @@ class IOPs_geojson:
         features: List[geojson.Feature] = []
         for area in areas_collector.areas.values():
             if len(area.outer_border) < 3:
-                logging.warning(f"Пропущена площадь {area.id} - внешняя граница содержит менее 3 узлов")
+                logging.warning(
+                    f"Пропущена площадь {area.id} - внешняя граница содержит менее 3 узлов"
+                )
                 continue
             if area.outer_border[0] != area.outer_border[-1]:
-                logging.warning(f"Пропущена площадь {area.id} - внешняя граница не замкнута. Исправление...")
+                logging.warning(
+                    f"Пропущена площадь {area.id} - внешняя граница не замкнута. Исправление..."
+                )
                 area.outer_border.append(area.outer_border[0])
             all_rings = [tuple((node.lon, node.lat) for node in area.outer_border)]
             list_node_id_from_area = [[node.id for node in area.outer_border]]
             for inner_border in area.inner_borders:
                 if len(inner_border) < 3:
-                    logging.warning(f"Пропущена внутренняя граница в площади {area.id} " f"- содержит менее 3 узлов")
+                    logging.warning(
+                        f"Пропущена внутренняя граница в площади {area.id} "
+                        f"- содержит менее 3 узлов"
+                    )
                     continue
                 if inner_border[0] != inner_border[-1]:
                     logging.warning(
-                        f"Пропущена внутренняя граница в площади {area.id} " f"- не замкнута. Исправление..."
+                        f"Пропущена внутренняя граница в площади {area.id} "
+                        f"- не замкнута. Исправление..."
                     )
                     inner_border.append(inner_border[0])
                 inner_coordinates = tuple((node.lon, node.lat) for node in inner_border)
@@ -238,7 +245,9 @@ class IOPs_geojson:
             with open(file_read_path, "r", encoding="utf-8") as f:
                 data = geojson.load(f)
         except (OSError, json.JSONDecodeError) as e:
-            raise JSONDecodeError("Ошибка при чтении GeoJSON файла", doc=str(e), pos=0) from e
+            raise JSONDecodeError(
+                "Ошибка при чтении GeoJSON файла", doc=str(e), pos=0
+            ) from e
 
         if not isinstance(data, geojson.FeatureCollection):
             raise ValueError("GeoJSON файл не содержит FeatureCollection")
@@ -254,14 +263,19 @@ class IOPs_geojson:
                 id_nodes = feature.properties.get("OSM_id_nodes", [])
                 if len(coordinates) != len(id_nodes):
                     t = feature.properties.get("OSM_id", -1)
-                    logging.warning(f"Количество координат и ID узлов не совпадает " f"для пути OSM_id={t}")
+                    logging.warning(
+                        f"Количество координат и ID узлов не совпадает "
+                        f"для пути OSM_id={t}"
+                    )
                     logging.error(f"Ошибка обработки точек пути: {id}\nПропуск пути")
                 nodes: List[Node] = []
                 for i, coordinate in enumerate(coordinates):
                     if node_collector.nodes.get(id_nodes[i]):
                         node = node_collector.nodes[id_nodes[i]]
                     else:
-                        node = Node(node_id=id_nodes[i], lon=coordinate[0], lat=coordinate[1])
+                        node = Node(
+                            node_id=id_nodes[i], lon=coordinate[0], lat=coordinate[1]
+                        )
                         node_collector.add_node(node)
                     nodes.append(node)
                 tags = feature.properties.get("tags", {})
@@ -283,9 +297,13 @@ class IOPs_geojson:
 
                 if len(outer_ring_coords) != len(outer_ring_ids):
                     logging.warning(
-                        f"Количество координат и ID узлов не совпадает для внешней границы " f"площади OSM_id={area_id}"
+                        f"Количество координат и ID узлов не совпадает для внешней границы "
+                        f"площади OSM_id={area_id}"
                     )
-                    logging.error(f"Ошибка обработки точек внешней границы площади: " f"{area_id}\n Пропуск площади")
+                    logging.error(
+                        f"Ошибка обработки точек внешней границы площади: "
+                        f"{area_id}\n Пропуск площади"
+                    )
                     continue
 
                 outer_border: List[Node] = []
