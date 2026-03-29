@@ -250,7 +250,6 @@ if __name__ == '__main__':
     processor = DataProcessor()
     kf = KalmanFilterCV(sigma_acc=0.0001 * 0.04, sigma_meas=1 * 2.4)
 
-    # 1. Загрузка изначального датафрейма
     df = processor.load_csv(data_path)
     df[['lon', 'lat']] = df[['lon', 'lat']].mask(df['satellites'] < 2, np.nan)
 
@@ -261,7 +260,7 @@ if __name__ == '__main__':
     chunk_size = 1000
     res_likelihood = []
 
-    # 2. Цикл разрезания изначального df на части по 100 строк
+    # Цикл разрезания изначального df на части по 1000 строк
     for i in range(0, len(df), chunk_size):
         # Берем сырой кусок
         chunk = df.iloc[i: i + chunk_size].copy()
@@ -269,7 +268,7 @@ if __name__ == '__main__':
         # Сбрасываем индексы, чтобы с нуля считать внутри куска (удобнее для срезов)
         chunk = chunk.reset_index(drop=True)
 
-        # 3. Ищем первый валидный индекс для lon и lat внутри ЭТОГО куска
+        # Ищем первый валидный индекс для lon и lat внутри ЭТОГО куска
         first_valid_lon = chunk['lon'].first_valid_index()
         first_valid_lat = chunk['lat'].first_valid_index()
 
@@ -287,20 +286,20 @@ if __name__ == '__main__':
         if len(clean_chunk) < 2:
             continue
 
-        # 4. Каст к x/y
+        # Каст к x/y
         lon, lat = processor.get_lon_lat(clean_chunk)
         x, y = processor.convert_to_local_cartesian(lon, lat)
         time = clean_chunk['time'].to_numpy()
 
-        # 5. Фильтр Калмана
+        # Фильтр Калмана
         _, _, likelihood = kf.filter(x, y, time)
 
-        # 6. Сохраняем правдоподобие
+        # Сохраняем правдоподобие
         res_likelihood.append(float(np.nansum(likelihood)))
 
     save_path = project_root / 'CV_100'
-    # 7. Визуализация
+    # Визуализация
     if res_likelihood:
-        DataProcessor.plot_array_and_hist(res_likelihood, bins=100, save_path= save_path)
+        DataProcessor.plot_array_and_hist(res_likelihood, bins=100, save_path=None)
     else:
         print("Не собрано ни одного значения правдоподобия.")
