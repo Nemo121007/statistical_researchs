@@ -11,20 +11,18 @@ from app.working.data_processor import DataProcessor
 class KalmanFilterRW:
     """Класс реализации фильтра Калмана для модели случайного блуждания (без скорости)."""
 
-    def __init__(self, sigma_proc: float = 0.04, sigma_meas: float = 2.4):
+    def __init__(self, sigma_acc: float = 0.04, sigma_meas: float = 2.4):
         """
         Инициализация параметров фильтра.
 
         Args:
-            sigma_proc: Интенсивность шума процесса (q).
-                        Определяет, насколько сильно точка может сместиться за 1 секунду (в метрах).
-                        (Т.е. sqrt(Q) ~ sigma_proc * sqrt(dt)).
-            sigma_meas: СКО шума измерений (в метрах).
+            sigma_acc: СКО шума ускорения.
+            sigma_meas: СКО шума измерений.
         """
-        self.sigma_proc = sigma_proc
+        self.sigma_acc = sigma_acc
         self.sigma_meas = sigma_meas
 
-    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float]:
+    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Применяет фильтр Калмана к траектории и вычисляет логарифм правдоподобия.
 
@@ -34,12 +32,14 @@ class KalmanFilterRW:
             time: Массив времени (в секундах).
 
         Returns:
-            Tuple[np.ndarray, np.ndarray, float]: Сглаженные координаты X, Y и сумма логарифмов правдоподобия.
+            Tuple[np.ndarray, np.ndarray, np.ndarray]:
+            - Сглаженные координаты X.
+            - Сглаженные координаты Y.
+            - Массив логарифмов правдоподобия (log-likelihood).
         """
         if len(x) < 2:
-            return x, y, 0.0
+            return x, y, np.array([])
 
-        # Размерность вектора состояния (x, y)
         n_dim = 2
 
         # Матрица перехода F = I
@@ -66,7 +66,7 @@ class KalmanFilterRW:
         I = np.eye(n_dim)
 
         # Переменная для накопления правдоподобия
-        total_log_likelihood = 0.0
+        likelihood = np.zeros(len(x))
         log_2pi = np.log(2 * np.pi)
         dim = 2  # Размерность измерения
 
@@ -76,7 +76,7 @@ class KalmanFilterRW:
                 dt = 1e-5
 
             # --- Формирование матрицы шума процесса Q ---
-            Q = np.eye(n_dim) * (self.sigma_proc ** 2 * dt)
+            Q = np.eye(n_dim) * (self.sigma_acc ** 2 * dt)
 
             # --- Prediction (Этап предсказания) ---
             X_pred = F @ X_state
@@ -92,19 +92,15 @@ class KalmanFilterRW:
             S = H @ P_pred @ H.T + R
 
             # --- Вычисление P(y_k | y_(1:k-1)) ---
-            # Вычисляем только если матрица S корректна
             det_S = np.linalg.det(S)
+            # Используем логарифм для численной устойчивости
             if det_S > 0:
                 S_inv = np.linalg.inv(S)
-                # Квадрат расстояния Махаланобиса
-                mahalanobis_dist = float(y_err.T @ S_inv @ y_err)
-
-                # Логарифм правдоподобия для шага k
-                step_log_likelihood = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
-                total_log_likelihood += step_log_likelihood
-
+                mahalanobis_dist = (y_err.T @ S_inv @ y_err).item()
+                likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
             else:
-                # В случае вырожденной матрицы используем псевдообратный подход или пропускаем шаг
+                # Защита: если матрица вырождена, используем псевдообратную матрицу
+                # для продолжения фильтрации, но правдоподобие не считаем
                 S_inv = np.linalg.pinv(S)
 
             # Коэффициент усиления Калмана
@@ -119,56 +115,7 @@ class KalmanFilterRW:
             filtered_x[k] = X_state[0, 0]
             filtered_y[k] = X_state[1, 0]
 
-        return filtered_x, filtered_y, total_log_likelihood
-
-
-def visualize_and_save(x_true: np.ndarray, y_true: np.ndarray,
-                       x_filt: np.ndarray, y_filt: np.ndarray,
-                       save_path: Path):
-    """Строит и сохраняет график сравнения траекторий."""
-    num_points = len(x_true)
-
-    plt.figure(figsize=(10, 8))
-    plt.plot(x_true, y_true, c='blue', label=f'Исходные данные ({num_points} точек)', alpha=0.6)
-    plt.plot(x_filt, y_filt, 'r--', label='Фильтр Калмана', linewidth=2)
-
-    plt.xlabel('X (метры)')
-    plt.ylabel('Y (метры)')
-    plt.title(f'Траектория: {save_path.stem} | Точек: {num_points}')
-    plt.legend()
-    plt.grid(True)
-    plt.axis('equal')
-
-    plt.savefig(save_path)
-    plt.close()
-
-
-def process_track_list(df_list: List[pd.DataFrame],
-                       save_dir: Path,
-                       processor: DataProcessor,
-                       kalman_filter: KalmanFilterRW,
-                       label: str):
-    """
-    Обрабатывает список треков: фильтрует и сохраняет визуализацию.
-
-    Args:
-        df_list: Список DataFrame для обработки.
-        save_dir: Папка для сохранения картинок.
-        processor: Экземпляр класса DataProcessor.
-        kalman_filter: Экземпляр класса KalmanFilterCV.
-        label: Название типа данных (для логирования).
-    """
-    print(f"Обработка {label}: {len(df_list)} шт.")
-
-    for i, df in enumerate(df_list):
-        lon, lat = processor.get_lon_lat(df)
-        x, y = processor.convert_to_local_cartesian(lon, lat)
-        time = df['time'].to_numpy()
-
-        x_filt, y_filt = kalman_filter.filter(x, y, time)
-
-        save_path = save_dir / f'track_{i}.png'
-        visualize_and_save(x, y, x_filt, y_filt, save_path)
+        return filtered_x, filtered_y, likelihood
 
 
 if __name__ == '__main__':
@@ -197,9 +144,9 @@ if __name__ == '__main__':
     list_valid_df, list_invalid_df = processor.parse_intervals(df)
 
     # Обработка валидных интервалов
-    process_track_list(list_valid_df, true_dir, processor, kf, "валидных интервалов")
+    processor.process_track_list(list_valid_df, true_dir, processor, kf, "валидных интервалов")
 
     # Обработка невалидных интервалов
-    process_track_list(list_invalid_df, false_dir, processor, kf, "невалидных интервалов")
+    processor.process_track_list(list_invalid_df, false_dir, processor, kf, "невалидных интервалов")
 
     print("Готово.")

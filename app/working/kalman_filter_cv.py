@@ -49,12 +49,12 @@ class KalmanFilterCV:
 
         return Q * (self.sigma_acc ** 2)
 
-    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float]:
+    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Применяет фильтр Калмана и вычисляет логарифм правдоподобия.
         """
         if len(x) < 2:
-            return x, y, 0.0
+            return x, y, np.array([])
 
         H = np.array([[1, 0, 0, 0],
                       [0, 1, 0, 0]])
@@ -75,7 +75,7 @@ class KalmanFilterCV:
         I = np.eye(4)
 
         # Переменная для накопления правдоподобия
-        total_log_likelihood = 0.0
+        likelihood = np.zeros(len(x))
 
         # Константа для формулы (2 * pi)
         log_2pi = np.log(2 * np.pi)
@@ -107,9 +107,8 @@ class KalmanFilterCV:
             # Используем логарифм для численной устойчивости
             if det_S > 0:
                 S_inv = np.linalg.inv(S)
-                mahalanobis_dist = float(y_err.T @ S_inv @ y_err)
-                step_log_likelihood = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
-                total_log_likelihood += step_log_likelihood
+                mahalanobis_dist = (y_err.T @ S_inv @ y_err).item()
+                likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
             else:
                 # Защита: если матрица вырождена, используем псевдообратную матрицу
                 # для продолжения фильтрации, но правдоподобие не считаем
@@ -123,56 +122,7 @@ class KalmanFilterCV:
             filtered_x[k] = X_state[0, 0]
             filtered_y[k] = X_state[1, 0]
 
-        return filtered_x, filtered_y, total_log_likelihood
-
-
-def visualize_and_save(x_true: np.ndarray, y_true: np.ndarray,
-                       x_filt: np.ndarray, y_filt: np.ndarray,
-                       save_path: Path):
-    """Строит и сохраняет график сравнения траекторий."""
-    num_points = len(x_true)
-
-    plt.figure(figsize=(10, 8))
-    plt.plot(x_true, y_true, c='blue', label=f'Исходные данные ({num_points} точек)', alpha=0.6)
-    plt.plot(x_filt, y_filt, 'r--', label='Фильтр Калмана', linewidth=2)
-
-    plt.xlabel('X (метры)')
-    plt.ylabel('Y (метры)')
-    plt.title(f'Траектория: {save_path.stem} | Точек: {num_points}')
-    plt.legend()
-    plt.grid(True)
-    plt.axis('equal')
-
-    plt.savefig(save_path)
-    plt.close()
-
-
-def process_track_list(df_list: List[pd.DataFrame],
-                       save_dir: Path,
-                       processor: DataProcessor,
-                       kalman_filter: KalmanFilterCV,
-                       label: str):
-    """
-    Обрабатывает список треков: фильтрует и сохраняет визуализацию.
-
-    Args:
-        df_list: Список DataFrame для обработки.
-        save_dir: Папка для сохранения картинок.
-        processor: Экземпляр класса DataProcessor.
-        kalman_filter: Экземпляр класса KalmanFilterCV.
-        label: Название типа данных (для логирования).
-    """
-    print(f"Обработка {label}: {len(df_list)} шт.")
-
-    for i, df in enumerate(df_list):
-        lon, lat = processor.get_lon_lat(df)
-        x, y = processor.convert_to_local_cartesian(lon, lat)
-        time = df['time'].to_numpy()
-
-        x_filt, y_filt = kalman_filter.filter(x, y, time)
-
-        save_path = save_dir / f'track_{i}.png'
-        visualize_and_save(x, y, x_filt, y_filt, save_path)
+        return filtered_x, filtered_y, likelihood
 
 
 if __name__ == '__main__':
@@ -201,9 +151,9 @@ if __name__ == '__main__':
     list_valid_df, list_invalid_df = processor.parse_intervals(df)
 
     # Обработка валидных интервалов
-    process_track_list(list_valid_df, true_dir, processor, kf, "валидных интервалов")
+    processor.process_track_list(list_valid_df, true_dir, processor, kf, "валидных интервалов")
 
     # Обработка невалидных интервалов
-    process_track_list(list_invalid_df, false_dir, processor, kf, "невалидных интервалов")
+    processor.process_track_list(list_invalid_df, false_dir, processor, kf, "невалидных интервалов")
 
     print("Готово.")
