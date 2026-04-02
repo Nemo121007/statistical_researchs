@@ -49,29 +49,21 @@ class DataProcessor:
             if len(group) <= 1:
                 continue
 
-            # Логика обработки группы (разбиение на чанки и проверка дистанции)
-            groups_to_process = []
-            if len(group) > n:
-                for i in range(0, len(group), n):
-                    groups_to_process.append(group.iloc[i:i + n])
-            else:
-                groups_to_process.append(group)
+            lons = group['lon'].to_numpy()
+            lats = group['lat'].to_numpy()
+            
+            chunk_start_idx = 0
+            for i in range(1, len(group)):
+                lon_ends = np.array([lons[chunk_start_idx], lons[i]])
+                lat_ends = np.array([lats[chunk_start_idx], lats[i]])
+                distance = float(np.nansum(CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat_ends, lon_ends)))
+                
+                if (i - chunk_start_idx + 1) >= n or distance >= distance_threshold:
+                    result_list.append(group.iloc[chunk_start_idx:i + 1])
+                    chunk_start_idx = i + 1
 
-            for chunk in groups_to_process:
-                lon, lat = self.get_lon_lat(chunk)
-                if len(lon) < 2:
-                    continue
-
-                # Проверка дистанции
-                lon_ends = np.array([lon[0], lon[-1]])
-                lat_ends = np.array([lat[0], lat[-1]])
-                distance = float(
-                    np.nansum(CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat_ends, lon_ends)))
-
-                if distance < distance_threshold:
-                    continue
-
-                result_list.append(chunk)
+            if chunk_start_idx < len(group) - 1:
+                result_list.append(group.iloc[chunk_start_idx:])
 
         return result_list
 
