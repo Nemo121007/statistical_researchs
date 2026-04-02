@@ -76,6 +76,9 @@ class DataProcessor:
         """
         Переводит сферические координаты (lon, lat) в локальные прямоугольные (x, y) в метрах.
         """
+        lon = np.asarray(lon)
+        lat = np.asarray(lat)
+        
         if len(lat) == 0:
             return np.array([]), np.array([])
 
@@ -174,48 +177,18 @@ class DataProcessor:
             print("Предупреждение: массив пуст или содержит только NaN. График не строится.")
             return
 
-        # --- ПРЕОБРАЗОВАНИЕ ДАННЫХ (КЛИППИНГ) ---
-        q1 = np.percentile(clean_arr, 25)  # 1 квартиль
-        q3 = np.percentile(clean_arr, 75)  # 3 квартиль
-        iqr = q3 - q1                       # Межквартильный размах (размах между 1 и 3 квартилем)
-
-        lower_bound = q1 - (iqr / 2)
-        upper_bound = q3 + (iqr / 2)
-
-        # Принудительно ограничиваем значения
-        corrected_arr = np.clip(clean_arr, lower_bound, upper_bound)
-
         # --- СОЗДАНИЕ ГРАФИКОВ ---
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
         # --- Первый сабплот: Линейный график (из скорректированных данных) ---
-        ax1.plot(corrected_arr, color='blue', linewidth=1.5)
+        ax1.plot(clean_arr, linewidth=1.5)
         ax1.set_title('Линейный график (скорректированный)')
         ax1.set_xlabel('Индекс')
         ax1.set_ylabel('Значение')
         ax1.grid(True)
 
         # --- Второй сабплот: Гистограмма частот (из скорректированных данных) ---
-        counts, bin_edges = np.histogram(corrected_arr, bins=bins)
-
-        # Логика ограничения максимального класса (оставляем как было)
-        if len(counts) > 1:
-            sorted_counts = np.sort(counts)[::-1]
-            max_count = sorted_counts[0]
-            second_max_count = sorted_counts[1]
-
-            if max_count > second_max_count + 1:
-                target_height = second_max_count + 1
-                counts[counts == max_count] = target_height
-        elif len(counts) == 1 and counts[0] > 1:
-            counts[0] = 1
-
-        # Рисуем гистограмму вручную через bar
-        bin_width = bin_edges[1] - bin_edges[0]
-        bin_centers = bin_edges[:-1] + bin_width / 2
-
-        ax2.bar(bin_centers, counts, width=bin_width, color='orange', edgecolor='black', alpha=0.7, align='center')
-
+        ax2.hist(clean_arr, bins=bins, edgecolor='black', alpha=0.7)
         ax2.set_title(f'Гистограмма частот RW (интервалы: {bins})\n(Макс. класс обрезан)', fontsize=10)
         ax2.set_xlabel('Значение')
         ax2.set_ylabel('Частота (скорректированная)')

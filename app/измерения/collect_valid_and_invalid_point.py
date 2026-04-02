@@ -13,12 +13,12 @@ if __name__ == '__main__':
     df = processor.load_csv(data_path)
     list_valid_df, list_invalid_df = processor.parse_intervals(df, 1000000, 1000000)
 
-    index = 1
+    index = 2, 5, 13, 16
+    index = 16
 
     df = list_valid_df[index]
 
-    lon = df['lon']
-    lat = df['lat']
+    lon, lat = processor.get_lon_lat(df)
     time = df['time']
 
     path = project_root / 'valid_interval.geojson'
