@@ -5,3 +5,9 @@ data/raw/3.csv
 data/raw/4.csv
 data/raw/5.csv
 /.idea/csv-editor.xml
+/.idea/.gitignore
+/.idea/copilot.data.migration.ask2agent.xml
+/.idea/modules.xml
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/statistical_researchs.iml
+/.idea/vcs.xml
