@@ -12,3 +12,6 @@ data/raw/5.csv
 /.idea/statistical_researchs.iml
 /.idea/vcs.xml
 /.idea/misc.xml
+/invalid_interval.geojson
+/.idea/inspectionProfiles/Project_Default.xml
+/valid_interval.geojson

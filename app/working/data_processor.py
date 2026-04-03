@@ -82,8 +82,15 @@ class DataProcessor:
         if len(lat) == 0:
             return np.array([]), np.array([])
 
-        lat0 = lat[0]
-        lon0 = lon[0]
+        valid_mask = ~np.isnan(lat) & ~np.isnan(lon)
+        valid_indices = np.where(valid_mask)[0]
+        
+        if len(valid_indices) == 0:
+            return np.full_like(lon, np.nan, dtype=float), np.full_like(lat, np.nan, dtype=float)
+
+        first_valid_idx = valid_indices[0]
+        lat0 = lat[first_valid_idx]
+        lon0 = lon[first_valid_idx]
 
         ky = self.LEN_LAT
         lat0_rad = np.radians(lat0)
@@ -163,12 +170,6 @@ class DataProcessor:
 
     @staticmethod
     def plot_array_and_hist(arr, bins=100, save_path: Path = None):
-        """
-        Рисует линейный график и гистограмму частот.
-        Перед рисовкой выбросы обрезаются по правилу:
-        всё, что меньше Q1 - IQR/2, становится равным Q1 - IQR/2.
-        всё, что больше Q3 + IQR/2, становится равным Q3 + IQR/2.
-        """
         # --- ЗАЩИТА ОТ NaN ---
         arr_np = np.asarray(arr).flatten()
         clean_arr = arr_np[~np.isnan(arr_np)]
@@ -179,6 +180,8 @@ class DataProcessor:
 
         # --- СОЗДАНИЕ ГРАФИКОВ ---
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        fig.suptitle(f'График и гистограмма для {save_path.name if save_path else "данных"}\n'
+                     f'Количество измерений: {len(clean_arr)}', fontsize=14)
 
         # --- Первый сабплот: Линейный график (из скорректированных данных) ---
         ax1.plot(clean_arr, linewidth=1.5)
@@ -189,9 +192,9 @@ class DataProcessor:
 
         # --- Второй сабплот: Гистограмма частот (из скорректированных данных) ---
         ax2.hist(clean_arr, bins=bins, edgecolor='black', alpha=0.7)
-        ax2.set_title(f'Гистограмма частот RW (интервалы: {bins})\n(Макс. класс обрезан)', fontsize=10)
+        ax2.set_title(f'Гистограмма частот RW (интервалы: {bins})', fontsize=10)
         ax2.set_xlabel('Значение')
-        ax2.set_ylabel('Частота (скорректированная)')
+        ax2.set_ylabel('Частота')
         ax2.grid(True, linestyle='--', alpha=0.6, axis='y')
 
         plt.tight_layout()
