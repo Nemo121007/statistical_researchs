@@ -68,9 +68,9 @@ class DataProcessor:
         return result_list
 
     @staticmethod
-    def get_lon_lat(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
-        """Извлекает массивы долгот и широт."""
-        return df['lon'].to_numpy(), df['lat'].to_numpy()
+    def get_lon_lat(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Извлекает массивы долгот, широт и времени"""
+        return df['lon'].to_numpy(), df['lat'].to_numpy(), df['time'].to_numpy()
 
     def convert_to_local_cartesian(self, lon: np.ndarray, lat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -255,9 +255,8 @@ if __name__ == '__main__':
             continue
 
         # Каст к x/y
-        lon, lat = processor.get_lon_lat(clean_chunk)
+        lon, lat, time = processor.get_lon_lat(clean_chunk)
         x, y = processor.convert_to_local_cartesian(lon, lat)
-        time = clean_chunk['time'].to_numpy()
 
         # Фильтр Калмана
         _, _, likelihood = kf.filter(x, y, time)

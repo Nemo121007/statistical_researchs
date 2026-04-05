@@ -45,8 +45,7 @@ if __name__ == '__main__':
 
     df = list_invalid_df[index]
 
-    lon, lat = processor.get_lon_lat(df)
-    time = df['time']
+    lon, lat, time = processor.get_lon_lat(df)
 
     path = project_root / 'invalid_interval.geojson'
     IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
