@@ -74,8 +74,8 @@ def filter_intervals(
     ]
 
     if not intervals:
-        lon_copy[finite_idx] = np.nan
-        lat_copy[finite_idx] = np.nan
+        # lon_copy[finite_idx] = np.nan
+        # lat_copy[finite_idx] = np.nan
         return lon_copy, lat_copy, time_copy, validate_mask
 
     # Первый интервал всегда валидный
@@ -102,8 +102,8 @@ def filter_intervals(
             last_valid_end = end
 
     invalid_mask = ~validate_mask.astype(bool)
-    lon_copy[invalid_mask] = np.nan
-    lat_copy[invalid_mask] = np.nan
+    # lon_copy[invalid_mask] = np.nan
+    # lat_copy[invalid_mask] = np.nan
 
     return lon_copy, lat_copy, time_copy, validate_mask
 
@@ -127,6 +127,7 @@ if __name__ == '__main__':
         'lat': check_lat,
         'time': check_time,
         'validate_point': df['validate_point'].to_numpy(),
+        'in_water' : df['in_water'].to_numpy(),
     })
 
     experimental_df = pd.DataFrame({

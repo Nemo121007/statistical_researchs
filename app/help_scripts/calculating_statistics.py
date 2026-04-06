@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Union
 
 import numpy as np
 import pandas as pd
@@ -31,38 +31,59 @@ class CalculatingStatistics:
         df = CalculatingStatistics._merge_dataframes(experimental_df, control_df)
 
         # Расчеты
-        exp_pts, ctrl_pts, point_recall = CalculatingStatistics._get_recall(df)
-        class_metrics = CalculatingStatistics.get_validation_metrics(df)
-        ctrl_len, exp_len, matched_len = CalculatingStatistics._get_recall_length(df)
-        fp_len = CalculatingStatistics._get_false_positive_length(df)
-        invalid_fp_len = CalculatingStatistics._get_invalid_false_positive_length(df)
+        stat_point = CalculatingStatistics._get_point_statistic(df)
+        stat_edge = CalculatingStatistics._get_edge_statistic(df)
+        lengths = CalculatingStatistics._get_statistic_abs_length(df)
 
         report_lines = [
             "=" * 50,
             "REPORT: Route Validation Statistics",
             "=" * 50,
+
             "\n[1] Point Metrics (Counts)",
-            f"  Control Valid Points: {ctrl_pts}",
-            f"  Matched Experimental Points (TP):  {exp_pts}",
-            f"  Point Recall:         {point_recall:.4f}",
-            "\n[2] Classification Metrics (Confusion Matrix)",
-            f"  True Positives (TP):  {class_metrics['TP']}",
-            f"  False Positives (FP): {class_metrics['FP']}",
-            f"  False Negatives (FN): {class_metrics['FN']}",
-            f"  True Negatives (TN):  {class_metrics['TN']}",
+            f"  Count valid point in control_df:      {stat_point['count_valid_point_control_df']}",
+            f"  Count valid point in experimental_df: {stat_point['count_valid_point_experimental_df']}",
+            f"  Count valid point in merge_df:        {stat_point['count_valid_point_merge_df']}",
+
             "-" * 50,
-            f"  Accuracy:             {class_metrics['Accuracy']:.4f}",
-            f"  Precision:            {class_metrics['Precision']:.4f}",
-            f"  Recall:               {class_metrics['Recall']:.4f}",
-            f"  F1 Score:             {class_metrics['F1']:.4f}",
-            "\n[3] Length Metrics (Meters)",
-            f"  Control Path Length:    {ctrl_len:.2f} m",
-            f"  Experimental Path Len:  {exp_len:.2f} m",
-            f"  Matched Path Length:    {matched_len:.2f} m",
-            f"  False Positive Length:  {fp_len:.2f} m",
+            f"  True Positives (TP):  {stat_point['TP']}",
+            f"  False Positives (FP): {stat_point['FP']}",
+            f"  False Negatives (FN): {stat_point['FN']}",
+            f"  True Negatives (TN):  {stat_point['TN']}",
+            f"  In_water:             {stat_point['in_water']}",
+
             "-" * 50,
-            f"  Length Recall:          {matched_len / ctrl_len if ctrl_len > 0 else 0.0:.4f}",
-            f"  Invalid Control Length (FP): {invalid_fp_len:.2f} m",
+            f"  Accuracy:   {stat_point['accuracy']:.4f}",
+            f"  Precision:  {stat_point['precision']:.4f}",
+            f"  Recall:     {stat_point['recall']:.4f}",
+            f"  F1 Score:   {stat_point['f_score']:.4f}",
+
+            "\n[2] Length Metrics (Meters)",
+            f"  Count valid edges in control_df:      {stat_edge['count_valid_edge_control_df']}",
+            f"  Count valid edges in experimental_df: {stat_edge['count_valid_edge_experimental_df']}",
+            f"  Count valid edges in merge_df:        {stat_edge['count_valid_edge_merge_df']}",
+            f"  Length valid edges in control_df:     {lengths['ctrl_distance']}",
+            f"  Length valid edges in experimental_df:{lengths['exp_distance']}",
+
+            "-" * 50,
+            f"  True Positives (TP):  {stat_edge['TP']}",
+            f"  False Positives (FP): {stat_edge['FP']}",
+            f"  False Negatives (FN): {stat_edge['FN']}",
+            f"  True Negatives (TN):  {stat_edge['TN']}",
+            f"  In_water:             {stat_edge['in_water']}",
+
+            "-" * 50,
+            f"  Accuracy:   {stat_edge['accuracy']:.4f}",
+            f"  Precision:  {stat_edge['precision']:.4f}",
+            f"  Recall:     {stat_edge['recall']:.4f}",
+            f"  F1 Score:   {stat_edge['f_score']:.4f}",
+
+            "-" * 50,
+            f"  Length True Positives (TP):  {stat_edge['length_TP']:.4f}",
+            f"  Length False Positives (FP): {stat_edge['length_FP']:.4f}",
+            f"  Length False Negatives (FN): {stat_edge['length_FN']:.4f}",
+            f"  Length True Negatives (TN):  {stat_edge['length_TN']:.4f}",
+
             "=" * 50,
         ]
 
@@ -77,106 +98,199 @@ class CalculatingStatistics:
         return full_report
 
     @staticmethod
-    def get_correct_classify_points(
-        experimental_df: pd.DataFrame, control_df: pd.DataFrame
-    ) -> List[pd.DataFrame]:
-        """
-        Возвращает список DataFrame, соответствующих верно классифицированным интервалам (True Positives).
+    def _get_point_statistic(merge_df: pd.DataFrame) -> Dict[str, Union[int, float]]:
+        if "ctrl_validate_point" not in merge_df.columns:
+            raise ValueError("merge_df must contain 'ctrl_validate_point' column.")
+        if "exp_validate_point" not in merge_df.columns:
+            raise ValueError("merge_df must contain 'exp_validate_point' column.")
+        # Приводим к булевому виду, NaN считаем как False
+        ctrl = merge_df["ctrl_validate_point"] == 1
+        exp = merge_df["exp_validate_point"] == 1
 
-        Интервал считается верно классифицированным, если точка в эксперименте помечена как валидная (1),
-        в контроле она тоже валидна (1), и их координаты полностью совпадают.
+        # Количества валидных точек
+        count_valid_point_control_df = int(np.nansum(ctrl))
+        count_valid_point_experimental_df = int(np.nansum(exp))
+        count_valid_point_merge_df = int(np.nansum(ctrl & exp))
+        in_water = merge_df["in_water"].fillna(0).astype(bool)
+        count_in_water = int((exp & in_water).sum())
 
-        Args:
-            experimental_df: DataFrame с экспериментальными данными.
-            control_df: DataFrame с контрольными данными.
+        # Матрица ошибок
+        TP = int(np.nansum(ctrl & exp))
+        FP = int(np.nansum(~ctrl & exp))
+        FN = int(np.nansum(ctrl & ~exp))
+        TN = int(np.nansum(~ctrl & ~exp))
 
-        Returns:
-            List[pd.DataFrame]: Список интервалов, которые являются True Positives.
-        """
-        # Слияние данных
-        df = CalculatingStatistics._merge_dataframes(experimental_df, control_df)
+        total = TP + FP + FN + TN
 
-        # Формирование условия True Positive
-        # Эксперимент = 1, Контроль = 1, Координаты совпадают
-        tp_mask = (
-            (df["exp_validate_point"] == 1)
-            & (df["ctrl_validate_point"] == 1)
-            & (df["exp_lat"] == df["ctrl_lat"])
-            & (df["exp_lon"] == df["ctrl_lon"])
+        # Метрики с защитой от деления на ноль
+        accuracy = (TP + TN) / total if total > 0 else 0.0
+        precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+        recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+        f_score = (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall) > 0
+            else 0.0
         )
 
-        # Выделение точек
-        tp_points = df.loc[
-            tp_mask, ["exp_lat", "exp_lon", "exp_validate_point", "exp_time"]
-        ].copy()
-
-        # Приведение к формату, ожидаемому _extend_intervals (lat, lon, time, validate_point)
-        tp_points.rename(
-            columns={
-                "exp_lat": "lat",
-                "exp_lon": "lon",
-                "exp_time": "time",
-                "exp_validate_point": "validate_point",
-            },
-            inplace=True,
-        )
-
-        return CalculatingStatistics._extend_intervals(tp_points)
+        return {
+            "count_valid_point_control_df": count_valid_point_control_df,
+            "count_valid_point_experimental_df": count_valid_point_experimental_df,
+            "count_valid_point_merge_df": count_valid_point_merge_df,
+            "TP": TP,
+            "FP": FP,
+            "FN": FN,
+            "TN": TN,
+            "in_water": count_in_water,
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+            "f_score": f_score,
+        }
 
     @staticmethod
-    def get_incorrect_classify_points(
-        experimental_df: pd.DataFrame, control_df: pd.DataFrame
-    ) -> List[pd.DataFrame]:
+    def _get_edge_statistic(merge_df: pd.DataFrame) -> Dict[str, float]:
         """
-        Возвращает список DataFrame, соответствующих неверно классифицированным интервалам (False Positives).
+        Статистика по рёбрам.
 
-        Интервал считается неверно классифицированным, если точка в эксперименте помечена как валидная (1),
-        но при этом:
-        - Либо в контроле она невалидна (0).
-        - Либо координаты не совпадают с контрольными.
+        Логика merge-ребра берётся из вашего правила:
+            ctrl_validate_point[i - 1] == 1 and exp_validate_point[i] == 1
 
-        Примечание: Функция возвращает именно "лишние" или "ошибочные" интервалы эксперимента (False Positives).
-        Пропущенные точки (False Negatives) не возвращаются, так как они отсутствуют в валидной части эксперимента.
-
-        Args:
-            experimental_df: DataFrame с экспериментальными данными.
-            control_df: DataFrame с контрольными данными.
-
-        Returns:
-            List[pd.DataFrame]: Список интервалов, которые являются False Positives.
+        При этом:
+        - control edges считаются как соседние точки внутри control-трека
+        - experimental edges считаются как соседние точки внутри experimental-трека
+        - попадание ребра в воду проверяется по двум точкам ребра
         """
-        # Слияние данных
-        df = CalculatingStatistics._merge_dataframes(experimental_df, control_df)
 
-        # Формирование условия True Positive (для последующего отрицания)
-        is_tp = (
-            (df["exp_validate_point"] == 1)
-            & (df["ctrl_validate_point"] == 1)
-            & (df["exp_lat"] == df["ctrl_lat"])
-            & (df["exp_lon"] == df["ctrl_lon"])
+        required_columns = {
+            "ctrl_validate_point",
+            "exp_validate_point",
+            "ctrl_lat",
+            "ctrl_lon",
+            "exp_lat",
+            "exp_lon",
+            "in_water",
+        }
+        missing = required_columns - set(merge_df.columns)
+        if missing:
+            raise ValueError(f"merge_df не содержит атрибутов: {sorted(missing)}")
+
+        n = len(merge_df)
+        if n < 2:
+            return {
+                "count_valid_edge_control_df": 0,
+                "count_valid_edge_experimental_df": 0,
+                "count_valid_edge_merge_df": 0,
+                "TP": 0,
+                "FP": 0,
+                "FN": 0,
+                "TN": 0,
+                "accuracy": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f_score": 0.0,
+                "in_water": 0,
+                "length_TP": 0.0,
+                "length_FP": 0.0,
+                "length_FN": 0.0,
+                "length_TN": 0.0,
+            }
+
+        # Булевы маски точек
+        ctrl_valid = merge_df["ctrl_validate_point"].eq(1).to_numpy()
+        exp_valid = merge_df["exp_validate_point"].eq(1).to_numpy()
+
+        in_water = merge_df["in_water"].fillna(0).astype(bool).to_numpy()
+
+        # Рёбра внутри каждого трека
+        ctrl_edge_valid = ctrl_valid[:-1] & ctrl_valid[1:]
+        exp_edge_valid = exp_valid[:-1] & exp_valid[1:]
+
+        # merge рёбер:
+        merge_edge_valid = ctrl_edge_valid & exp_edge_valid
+
+        # Ребро в воде, если обе его точки в воде
+        edge_in_water = in_water[:-1] & in_water[1:]
+
+        # Counts
+        count_valid_edge_control_df = int(ctrl_edge_valid.sum())
+        count_valid_edge_experimental_df = int(exp_edge_valid.sum())
+        count_valid_edge_merge_df = int(merge_edge_valid.sum())
+        count_in_water = int((merge_edge_valid & edge_in_water).sum())
+
+        # Матрица ошибок по рёбрам:
+        # сравниваем последовательные рёбра внутри control и experimental треков
+        TP_mask = merge_edge_valid
+        FP_mask = (~ctrl_edge_valid) & exp_edge_valid
+        FN_mask = ctrl_edge_valid & (~exp_edge_valid)
+        TN_mask = (~ctrl_edge_valid) & (~exp_edge_valid)
+
+        TP = int(TP_mask.sum())
+        FP = int(FP_mask.sum())
+        FN = int(FN_mask.sum())
+        TN = int(TN_mask.sum())
+
+        total = TP + FP + FN + TN
+
+        accuracy = (TP + TN) / total if total > 0 else 0.0
+        precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+        recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+        f_score = (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall) > 0
+            else 0.0
         )
 
-        # Условие False Positive
-        # Эксперимент считает точку валидной, но это НЕ True Positive
-        fp_mask = (df["exp_validate_point"] == 1) & (~is_tp)
-
-        # Выделение точек
-        fp_points = df.loc[
-            fp_mask, ["exp_lat", "exp_lon", "exp_validate_point", "exp_time"]
-        ].copy()
-
-        # Приведение к формату, ожидаемому _extend_intervals
-        fp_points.rename(
-            columns={
-                "exp_lat": "lat",
-                "exp_lon": "lon",
-                "exp_time": "time",
-                "exp_validate_point": "validate_point",
-            },
-            inplace=True,
+        edge_lengths = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+            merge_df["ctrl_lat"].to_numpy(dtype=float),
+            merge_df["ctrl_lon"].to_numpy(dtype=float),
         )
 
-        return CalculatingStatistics._extend_intervals(fp_points)
+        # Длинна считается если оба конца ребра принадлежат к одному ребру
+        length_TP = float(np.nansum(edge_lengths[TP_mask]))
+        length_FP = float(np.nansum(edge_lengths[FP_mask]))
+        length_FN = float(np.nansum(edge_lengths[FN_mask]))
+        length_TN = float(np.nansum(edge_lengths[TN_mask]))
+
+        return {
+            "count_valid_edge_control_df": count_valid_edge_control_df,
+            "count_valid_edge_experimental_df": count_valid_edge_experimental_df,
+            "count_valid_edge_merge_df": count_valid_edge_merge_df,
+            "TP": TP,
+            "FP": FP,
+            "FN": FN,
+            "TN": TN,
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+            "f_score": f_score,
+            "in_water": count_in_water,
+            "length_TP": length_TP,
+            "length_FP": length_FP,
+            "length_FN": length_FN,
+            "length_TN": length_TN,
+        }
+
+    @staticmethod
+    def _get_statistic_abs_length(merge_df: pd.DataFrame) -> Dict[str, float]:
+        mask = merge_df['ctrl_validate_point'] == 1
+        ctrl_lat = (merge_df.loc[mask, 'ctrl_lat']).to_numpy(dtype=float)
+        ctrl_lon = (merge_df.loc[mask, 'ctrl_lon']).to_numpy(dtype=float)
+        ctrl_distance = np.nansum(CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+            ctrl_lat,
+            ctrl_lon,
+        ))
+
+        mask = merge_df['exp_validate_point'] == 1
+        exp_lat = (merge_df.loc[mask, 'exp_lat']).to_numpy(dtype=float)
+        exp_lon = (merge_df.loc[mask, 'exp_lon']).to_numpy(dtype=float)
+        exp_distance = np.nansum(CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+            exp_lat,
+            exp_lon,
+        ))
+        return {
+            'ctrl_distance': ctrl_distance,
+            'exp_distance': exp_distance,
+        }
 
     @staticmethod
     def _merge_dataframes(
@@ -193,6 +307,8 @@ class CalculatingStatistics:
         Returns:
             Объединенный DataFrame с префиксами для каждой колонки.
         """
+        if len(experimental_df) != len(control_df):
+            raise ValueError(f"Длинны DF не совпадают: {len(experimental_df)} != {len(control_df)}")
         # Список колонок для слияния (time нужна для _extend_intervals)
         cols_to_merge = ["lat", "lon", "validate_point", "time"]
 
@@ -213,289 +329,11 @@ class CalculatingStatistics:
                 "time": "ctrl_time",
             }
         )
+        ctrl_part['in_water'] = control_df['in_water']
 
         return pd.concat(
             [exp_part.reset_index(drop=True), ctrl_part.reset_index(drop=True)], axis=1
         )
-
-    @staticmethod
-    def _get_recall(df: pd.DataFrame) -> Tuple[int, int, float]:
-        """
-        Рассчитывает точечную полноту (Point Recall).
-        Принимает уже смерженный DataFrame.
-
-        Args:
-            df: DataFrame, содержащий колонки с префиксами exp_ и ctrl_.
-        Returns:
-            experimental_count: Количество совпавших валидных точек в эксперименте.
-            control_count: Количество валидных точек в контроле.
-            recall_count: Доля совпавших точек от общего количества валидных точек в контроле (Recall).
-        """
-        control_count = df[df["ctrl_validate_point"] == 1].shape[0]
-
-        match_condition = (
-            (df["ctrl_validate_point"] == 1)
-            & (df["exp_validate_point"] == 1)
-            & (df["exp_lat"] == df["ctrl_lat"])
-            & (df["exp_lon"] == df["ctrl_lon"])
-        )
-        experimental_count = df[match_condition].shape[0]
-
-        recall_count = experimental_count / control_count if control_count > 0 else 0.0
-        return experimental_count, control_count, recall_count
-
-    @staticmethod
-    def _get_recall_length(df: pd.DataFrame) -> Tuple[float, float, float]:
-        """
-        Рассчитывает метрики протяженности маршрутов.
-        Принимает уже смерженный DataFrame.
-        Извлекает необходимые колонки для расчета длин.
-
-        Args:
-            df: DataFrame, содержащий колонки с префиксами exp_ и ctrl_.
-        Returns:
-            control_length: Общая длина контрольного маршрута (метры).
-            experimental_length: Общая длина экспериментального маршрута (метры).
-            matched_length: Длина совпавших сегментов между экспериментом и контролем (метры).
-        """
-        # Подготовка данных контрольного маршрута (извлекаем из общего df)
-        ctrl_path = df[
-            ["ctrl_lat", "ctrl_lon", "ctrl_validate_point", "ctrl_time"]
-        ].rename(
-            columns={
-                "ctrl_lat": "lat",
-                "ctrl_lon": "lon",
-                "ctrl_validate_point": "validate_point",
-                "ctrl_time": "time",
-            }
-        )
-        control_list_df = CalculatingStatistics._extend_intervals(ctrl_path)
-        control_length = np.nansum(
-            [
-                np.nansum(
-                    CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-                        interval["lat"].values, interval["lon"].values
-                    )
-                )
-                for interval in control_list_df
-            ]
-        )
-
-        # Подготовка данных экспериментального маршрута
-        exp_path = df[["exp_lat", "exp_lon", "exp_validate_point", "exp_time"]].rename(
-            columns={
-                "exp_lat": "lat",
-                "exp_lon": "lon",
-                "exp_validate_point": "validate_point",
-                "exp_time": "time",
-            }
-        )
-        exp_list_df = CalculatingStatistics._extend_intervals(exp_path)
-        exp_length = np.nansum(
-            [
-                np.nansum(
-                    CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-                        interval["lat"].values, interval["lon"].values
-                    )
-                )
-                for interval in exp_list_df
-            ]
-        )
-
-        # Расчет совпавших сегментов
-        match_condition = (
-            (df["ctrl_validate_point"] == 1)
-            & (df["exp_validate_point"] == 1)
-            & (df["exp_lat"] == df["ctrl_lat"])
-            & (df["exp_lon"] == df["ctrl_lon"])
-        )
-
-        # Извлекаем совпавшие точки, используя экспериментальные координаты и время
-        matched_path = df[match_condition][
-            ["exp_lat", "exp_lon", "exp_validate_point", "exp_time"]
-        ].rename(
-            columns={
-                "exp_lat": "lat",
-                "exp_lon": "lon",
-                "exp_validate_point": "validate_point",
-                "exp_time": "time",
-            }
-        )
-
-        concat_exp_list_df = CalculatingStatistics._extend_intervals(matched_path)
-        concat_exp_length = np.nansum(
-            [
-                np.nansum(
-                    CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-                        interval["lat"].values, interval["lon"].values
-                    )
-                )
-                for interval in concat_exp_list_df
-            ]
-        )
-
-        return float(control_length), float(exp_length), float(concat_exp_length)
-
-    @staticmethod
-    def _extend_intervals(df: pd.DataFrame) -> List[pd.DataFrame]:
-        """
-        Разбивает DataFrame на список непрерывных временных интервалов.
-
-        Args:
-            df: DataFrame с колонкой 'time' и 'validate_point'.
-        Returns:
-            Список DataFrame, каждый из которых представляет непрерывный временной интервал с validate_point == 1.
-        """
-        if df.empty:
-            return []
-
-        clean_df = df[df["validate_point"] == 1].copy()
-        if clean_df.empty:
-            return []
-
-        time_diff = clean_df["time"].diff()
-        split_mask = time_diff > 10
-        group_ids = split_mask.cumsum()
-        return [group for _, group in clean_df.groupby(group_ids) if len(group) > 1]
-
-    @staticmethod
-    def _get_false_positive_length(df: pd.DataFrame) -> float:
-        """
-        Вычисляет длину ошибочно классифицированных интервалов.
-        Принимает уже смерженный DataFrame.
-
-        Args:
-            df: DataFrame, содержащий колонки с префиксами exp_ и ctrl_.
-        Returns:
-            false_positive_length: Общая длина сегментов, которые были ошибочно классифицированы
-            как валидные в эксперименте, но не совпали с контролем (метры).
-        """
-        is_exp_valid = df["exp_validate_point"] == 1
-        is_true_positive = (
-            (df["ctrl_validate_point"] == 1)
-            & (df["exp_lat"] == df["ctrl_lat"])
-            & (df["exp_lon"] == df["ctrl_lon"])
-        )
-
-        false_positive_condition = is_exp_valid & (~is_true_positive)
-        fp_df = df[false_positive_condition].copy()
-
-        if fp_df.empty:
-            return 0.0
-
-        # Извлекаем нужные колонки для расчета длины
-        fp_path = fp_df[
-            ["exp_lat", "exp_lon", "exp_validate_point", "exp_time"]
-        ].rename(
-            columns={
-                "exp_lat": "lat",
-                "exp_lon": "lon",
-                "exp_validate_point": "validate_point",
-                "exp_time": "time",
-            }
-        )
-
-        fp_intervals = CalculatingStatistics._extend_intervals(fp_path)
-        fp_length = np.nansum(
-            [
-                np.nansum(
-                    CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-                        interval["lat"].values, interval["lon"].values
-                    )
-                )
-                for interval in fp_intervals
-            ]
-        )
-
-        return float(fp_length)
-
-    @staticmethod
-    def get_validation_metrics(df: pd.DataFrame) -> dict:
-        """
-        Строит Confusion Matrix.
-        Принимает уже смерженный DataFrame.
-
-        Args:
-            df: DataFrame, содержащий колонки с префиксами exp_ и ctrl_.
-        Returns:
-            Словарь с метриками: TP, FP, FN, TN, Accuracy, Precision, Recall, F1.
-        """
-        # Базовые условия валидности
-        is_exp_pos = df["exp_validate_point"] == 1
-        is_ctrl_pos = df["ctrl_validate_point"] == 1
-
-        # Считаем TP напрямую, инлайним проверку координат
-        tp = np.nansum(
-            is_exp_pos
-            & is_ctrl_pos
-            & (df["exp_lat"] == df["ctrl_lat"])
-            & (df["exp_lon"] == df["ctrl_lon"])
-        )
-
-        # FP и FN выводим через разницу множеств (без лишних масок)
-        # FP = Все предсказанные положительные (exp_pos) минус истинные (tp)
-        fp = np.nansum(is_exp_pos) - tp
-        # FN = Все реальные положительные (ctrl_pos) минус истинные (tp)
-        fn = np.nansum(is_ctrl_pos) - tp
-
-        # TN вычисляем как остаток
-        tn = len(df) - tp - fp - fn
-
-        # Промежуточные метрики для F1 (используются дважды)
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-
-        return {
-            "TP": int(tp),
-            "FP": int(fp),
-            "FN": int(fn),
-            "TN": int(tn),
-            "Accuracy": (tp + tn) / len(df) if len(df) > 0 else 0.0,
-            "Precision": precision,
-            "Recall": recall,
-            "F1": (
-                2 * precision * recall / (precision + recall)
-                if (precision + recall) > 0
-                else 0.0
-            ),
-        }
-
-    @staticmethod
-    def _get_invalid_false_positive_length(df: pd.DataFrame) -> float:
-        condition = (
-            (df["ctrl_validate_point"] == 0) &
-            (df["exp_validate_point"] == 1)
-        )
-
-        invalid_fp_df = df[condition]
-
-        if invalid_fp_df.empty:
-            return 0.0
-
-        path = invalid_fp_df[
-            ["exp_lat", "exp_lon", "exp_validate_point", "exp_time"]
-        ].rename(
-            columns={
-                "exp_lat": "lat",
-                "exp_lon": "lon",
-                "exp_validate_point": "validate_point",
-                "exp_time": "time",
-            }
-        )
-
-        intervals = CalculatingStatistics._extend_intervals(path)
-
-        length = np.nansum([
-            np.nansum(
-                CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-                    interval["lat"].values,
-                    interval["lon"].values
-                )
-            )
-            for interval in intervals
-        ])
-
-        return float(length)
 
 
 if __name__ == "__main__":

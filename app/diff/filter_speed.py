@@ -70,8 +70,8 @@ def filter_speed(
             mask[i] = 1
             last_valid_idx = i
         else:
-            lon[i] = np.nan
-            lat[i] = np.nan
+            # lon[i] = np.nan
+            # lat[i] = np.nan
             mask[i] = 0
 
     return lon, lat, time, mask
@@ -93,6 +93,7 @@ if __name__ == '__main__':
         'lat': check_lat,
         'time': check_time,
         'validate_point': df['validate_point'].to_numpy(),
+        'in_water': df['in_water'].to_numpy(),
     })
 
     experimental_df = pd.DataFrame({
