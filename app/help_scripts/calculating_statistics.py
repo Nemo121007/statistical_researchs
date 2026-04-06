@@ -35,6 +35,7 @@ class CalculatingStatistics:
         class_metrics = CalculatingStatistics.get_validation_metrics(df)
         ctrl_len, exp_len, matched_len = CalculatingStatistics._get_recall_length(df)
         fp_len = CalculatingStatistics._get_false_positive_length(df)
+        invalid_fp_len = CalculatingStatistics._get_invalid_false_positive_length(df)
 
         report_lines = [
             "=" * 50,
@@ -61,6 +62,7 @@ class CalculatingStatistics:
             f"  False Positive Length:  {fp_len:.2f} m",
             "-" * 50,
             f"  Length Recall:          {matched_len / ctrl_len if ctrl_len > 0 else 0.0:.4f}",
+            f"  Invalid Control Length (FP): {invalid_fp_len:.2f} m",
             "=" * 50,
         ]
 
@@ -268,9 +270,9 @@ class CalculatingStatistics:
             }
         )
         control_list_df = CalculatingStatistics._extend_intervals(ctrl_path)
-        control_length = np.sum(
+        control_length = np.nansum(
             [
-                np.sum(
+                np.nansum(
                     CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
                         interval["lat"].values, interval["lon"].values
                     )
@@ -289,9 +291,9 @@ class CalculatingStatistics:
             }
         )
         exp_list_df = CalculatingStatistics._extend_intervals(exp_path)
-        exp_length = np.sum(
+        exp_length = np.nansum(
             [
-                np.sum(
+                np.nansum(
                     CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
                         interval["lat"].values, interval["lon"].values
                     )
@@ -321,9 +323,9 @@ class CalculatingStatistics:
         )
 
         concat_exp_list_df = CalculatingStatistics._extend_intervals(matched_path)
-        concat_exp_length = np.sum(
+        concat_exp_length = np.nansum(
             [
-                np.sum(
+                np.nansum(
                     CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
                         interval["lat"].values, interval["lon"].values
                     )
@@ -394,9 +396,9 @@ class CalculatingStatistics:
         )
 
         fp_intervals = CalculatingStatistics._extend_intervals(fp_path)
-        fp_length = np.sum(
+        fp_length = np.nansum(
             [
-                np.sum(
+                np.nansum(
                     CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
                         interval["lat"].values, interval["lon"].values
                     )
@@ -423,7 +425,7 @@ class CalculatingStatistics:
         is_ctrl_pos = df["ctrl_validate_point"] == 1
 
         # Считаем TP напрямую, инлайним проверку координат
-        tp = np.sum(
+        tp = np.nansum(
             is_exp_pos
             & is_ctrl_pos
             & (df["exp_lat"] == df["ctrl_lat"])
@@ -432,9 +434,9 @@ class CalculatingStatistics:
 
         # FP и FN выводим через разницу множеств (без лишних масок)
         # FP = Все предсказанные положительные (exp_pos) минус истинные (tp)
-        fp = np.sum(is_exp_pos) - tp
+        fp = np.nansum(is_exp_pos) - tp
         # FN = Все реальные положительные (ctrl_pos) минус истинные (tp)
-        fn = np.sum(is_ctrl_pos) - tp
+        fn = np.nansum(is_ctrl_pos) - tp
 
         # TN вычисляем как остаток
         tn = len(df) - tp - fp - fn
@@ -457,6 +459,43 @@ class CalculatingStatistics:
                 else 0.0
             ),
         }
+
+    @staticmethod
+    def _get_invalid_false_positive_length(df: pd.DataFrame) -> float:
+        condition = (
+            (df["ctrl_validate_point"] == 0) &
+            (df["exp_validate_point"] == 1)
+        )
+
+        invalid_fp_df = df[condition]
+
+        if invalid_fp_df.empty:
+            return 0.0
+
+        path = invalid_fp_df[
+            ["exp_lat", "exp_lon", "exp_validate_point", "exp_time"]
+        ].rename(
+            columns={
+                "exp_lat": "lat",
+                "exp_lon": "lon",
+                "exp_validate_point": "validate_point",
+                "exp_time": "time",
+            }
+        )
+
+        intervals = CalculatingStatistics._extend_intervals(path)
+
+        length = np.nansum([
+            np.nansum(
+                CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+                    interval["lat"].values,
+                    interval["lon"].values
+                )
+            )
+            for interval in intervals
+        ])
+
+        return float(length)
 
 
 if __name__ == "__main__":

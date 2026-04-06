@@ -1,0 +1,139 @@
+from pathlib import Path
+from typing import List, Tuple
+
+import numpy as np
+import pandas as pd
+
+from app.help_scripts.calculator_distances_length_large_circle import CalculatorDistancesLengthLargeCircle
+from app.working.data_processor import DataProcessor
+from app.help_scripts.calculating_statistics import CalculatingStatistics
+
+
+EARTH_RADIUS = 6371000.0  # meters
+SPEED_THRESHOLD = 20.0    # m/s
+
+
+def haversine_single(lat1, lon1, lat2, lon2):
+    """
+    lat1, lon1, lat2, lon2 должны быть в радианах.
+    """
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
+    c = 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
+
+    return EARTH_RADIUS * c
+
+
+def filter_intervals(
+    lon: np.ndarray,
+    lat: np.ndarray,
+    time: np.ndarray,
+    speed_threshold: float = SPEED_THRESHOLD,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    n = len(lon)
+    if n == 0:
+        return np.array([], dtype=float), np.array([], dtype=float), np.array([], dtype=float), np.array([], dtype=np.int8)
+
+    lon_copy = np.asarray(lon, dtype=float).copy()
+    lat_copy = np.asarray(lat, dtype=float).copy()
+    time_copy = np.asarray(time, dtype=float).copy()
+
+    finite_mask = np.isfinite(lon_copy) & np.isfinite(lat_copy) & np.isfinite(time_copy)
+    finite_idx = np.flatnonzero(finite_mask)
+
+    lon_finite = lon_copy[finite_mask]
+    lat_finite = lat_copy[finite_mask]
+    time_finite = time_copy[finite_mask]
+
+    validate_mask = np.zeros(n, dtype=np.int8)
+
+    if len(time_finite) == 0:
+        lon_copy[:] = np.nan
+        lat_copy[:] = np.nan
+        return lon_copy, lat_copy, time_copy, validate_mask
+
+    if len(time_finite) == 1:
+        validate_mask[finite_idx[0]] = 1
+        return lon_copy, lat_copy, time_copy, validate_mask
+
+    distance = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+        lat_finite, lon_finite
+    )
+    diff_time = np.diff(time_finite)
+
+    speed = distance / diff_time
+    split_index = np.where(speed > speed_threshold)[0] + 1
+
+    chunks = np.split(np.arange(len(time_finite)), split_index)
+    intervals: List[Tuple[int, int]] = [
+        (int(chunk[0]), int(chunk[-1]))
+        for chunk in chunks
+        if chunk.size > 0
+    ]
+
+    if not intervals:
+        lon_copy[finite_idx] = np.nan
+        lat_copy[finite_idx] = np.nan
+        return lon_copy, lat_copy, time_copy, validate_mask
+
+    # Первый интервал всегда валидный
+    first_start, first_end = intervals[0]
+    validate_mask[finite_idx[first_start:first_end + 1]] = 1
+    last_valid_end = first_end
+
+    for start, end in intervals[1:]:
+        dt = time_finite[start] - time_finite[last_valid_end]
+
+        if not np.isfinite(dt) or dt <= 0:
+            continue
+
+        dist = haversine_single(
+            np.radians(lat_finite[last_valid_end]),
+            np.radians(lon_finite[last_valid_end]),
+            np.radians(lat_finite[start]),
+            np.radians(lon_finite[start]),
+        )
+        bridge_speed = dist / dt
+
+        if bridge_speed < speed_threshold:
+            validate_mask[finite_idx[start:end + 1]] = 1
+            last_valid_end = end
+
+    invalid_mask = ~validate_mask.astype(bool)
+    lon_copy[invalid_mask] = np.nan
+    lat_copy[invalid_mask] = np.nan
+
+    return lon_copy, lat_copy, time_copy, validate_mask
+
+
+if __name__ == '__main__':
+    project_root = Path(__file__).parent.parent.parent
+    data_path = project_root / 'data' / 'post_processing' / 'example.csv'
+
+    processor = DataProcessor()
+    df = processor.load_csv(data_path)
+
+    lon, lat, time = processor.get_lon_lat(df)
+
+    check_lon, check_lat, check_time, check_validate_point = filter_intervals(
+        lon, lat, time,
+        speed_threshold=20.0,
+    )
+
+    control_df = pd.DataFrame({
+        'lon': check_lon,
+        'lat': check_lat,
+        'time': check_time,
+        'validate_point': df['validate_point'].to_numpy(),
+    })
+
+    experimental_df = pd.DataFrame({
+        'lon': check_lon,
+        'lat': check_lat,
+        'time': check_time,
+        'validate_point': check_validate_point,
+    })
+
+    CalculatingStatistics.calculate_statistics(experimental_df, control_df)
