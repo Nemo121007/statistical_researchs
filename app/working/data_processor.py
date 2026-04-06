@@ -181,7 +181,8 @@ class DataProcessor:
         # --- СОЗДАНИЕ ГРАФИКОВ ---
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
         fig.suptitle(f'График и гистограмма для {save_path.name if save_path else "данных"}\n'
-                     f'Количество измерений: {len(clean_arr)}', fontsize=14)
+                     f'Количество численных измерений: {len(clean_arr)}\n'
+                     f'Количество элементов на вход: {len(arr)}', fontsize=14)
 
         # --- Первый сабплот: Линейный график (из скорректированных данных) ---
         ax1.plot(clean_arr, linewidth=1.5)
