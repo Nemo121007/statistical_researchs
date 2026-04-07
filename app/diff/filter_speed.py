@@ -59,7 +59,8 @@ def filter_speed(
     n = lon.size
     valid_indices = np.where(~np.isnan(lon) & ~np.isnan(lat))[0]
     if n == 0 or len(valid_indices) == 0:
-        return np.ndarray([]), np.ndarray([]), np.ndarray([]), np.ndarray([])
+        return (np.ndarray([], dtype=np.float32), np.ndarray([], dtype=np.float32),
+                np.ndarray([], dtype=np.int32), np.ndarray([], dtype=np.bool))
 
     mask = np.zeros(n, dtype=np.int8)
     mask[valid_indices[0]] = 1
@@ -151,17 +152,17 @@ if __name__ == "__main__":
             step = 100000
             path_dir = Path(__file__).parent.parent.parent
             for i in range(0, len(lon_df), step):
-                lon = lon_df[i : i + step]
-                lat = lat_df[i : i + step]
-                time = time_df[i : i + step]
+                lon = lon_df[i: i + step]
+                lat = lat_df[i: i + step]
+                time = time_df[i: i + step]
                 number = i // step
                 path = path_dir / f"control_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
 
             for i in range(0, len(lon_df), step):
-                lon = check_lon[i : i + step]
-                lat = check_lat[i : i + step]
-                time = check_time[i : i + step]
+                lon = check_lon[i: i + step]
+                lat = check_lat[i: i + step]
+                time = check_time[i: i + step]
                 number = i // step
                 path = path_dir / f"experiment_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])

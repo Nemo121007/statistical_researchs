@@ -5,54 +5,67 @@ from typing import List, Tuple
 import numpy as np
 import pandas as pd
 
-from app.help_scripts.calculating_statistics import CalculatingStatistics
-from app.help_scripts.calculator_distances_length_large_circle import (
-    CalculatorDistancesLengthLargeCircle,
-)
 from app.help_scripts.IOPs_geojson import IOPs_geojson
+from app.help_scripts.calculating_statistics import CalculatingStatistics
 from app.working.data_processor import DataProcessor
 
 EARTH_RADIUS = 6371000.0  # meters
 SPEED_THRESHOLD = 20.0  # m/s
+MAX_POINTS_IN_INTERVAL = 180
 
 
-def haversine_single(lat1, lon1, lat2, lon2) -> float:
-    """
-    Метод, вычисляющий расстояние между двумя точками
-    Args:
-        lat1: широта первой точки
-        lon1: долгота первой точки
-        lat2: широта второй точки
-        lon2: долгота второй точки
-    Returns:
-        Расстояние между двумя точками
-    """
+def haversine_single(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dlat = lat2 - lat1
     dlon = lon2 - lon1
 
-    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
+    a = (
+        np.sin(dlat / 2.0) ** 2
+        + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
+    )
     c = 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
-
     return float(EARTH_RADIUS * c)
 
 
-def filter_intervals(
+def segment_distances(lat_rad: np.ndarray, lon_rad: np.ndarray) -> np.ndarray:
+    if len(lat_rad) < 2:
+        return np.array([], dtype=float)
+
+    dlat = np.diff(lat_rad)
+    dlon = np.diff(lon_rad)
+
+    a = (
+        np.sin(dlat / 2.0) ** 2
+        + np.cos(lat_rad[:-1]) * np.cos(lat_rad[1:]) * np.sin(dlon / 2.0) ** 2
+    )
+    c = 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
+    return EARTH_RADIUS * c
+
+
+def _split_interval_by_max_points(start: int, end: int, max_points: int) -> List[Tuple[int, int]]:
+    if end < start:
+        return []
+
+    result: List[Tuple[int, int]] = []
+    cur = start
+
+    while cur <= end:
+        cur_end = min(cur + max_points - 1, end)
+        result.append((cur, cur_end))
+        cur = cur_end + 1
+
+    return result
+
+
+def filter_intervals_by_speed_reachability_and_max_points(
     lon: np.ndarray,
     lat: np.ndarray,
     time: np.ndarray,
     speed_threshold: float = SPEED_THRESHOLD,
+    max_points_in_interval: int = MAX_POINTS_IN_INTERVAL,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Метод, фильтрующий временной ряд по интервалам и скорости
-    Args:
-        lon: Массив долгот
-        lat: Массив широт
-        time: Массив временных меток
-        speed_threshold: Предельное значение скорости
-    Returns:
-        Массив долгот, Массив широт, Массив временных меток, Массив флагов валидности точек
-    """
-    # pylint: disable=too-many-locals
+    if lon.shape != lat.shape or lon.shape != time.shape:
+        raise ValueError("lon, lat и time должны иметь одинаковую длину")
+
     n = len(lon)
     if n == 0:
         return (
@@ -66,61 +79,74 @@ def filter_intervals(
     lat_copy = np.asarray(lat, dtype=float).copy()
     time_copy = np.asarray(time, dtype=float).copy()
 
-    finite_mask = np.isfinite(lon_copy) & np.isfinite(lat_copy) & np.isfinite(time_copy)
+    finite_mask = (
+        np.isfinite(lon_copy) & np.isfinite(lat_copy) & np.isfinite(time_copy)
+    )
     finite_idx = np.flatnonzero(finite_mask)
+
+    validate_mask = np.zeros(n, dtype=np.int8)
+
+    if finite_idx.size == 0:
+        return lon_copy, lat_copy, time_copy, validate_mask
+
+    if finite_idx.size == 1:
+        validate_mask[finite_idx[0]] = 1
+        return lon_copy, lat_copy, time_copy, validate_mask
 
     lon_finite = lon_copy[finite_mask]
     lat_finite = lat_copy[finite_mask]
     time_finite = time_copy[finite_mask]
 
-    validate_mask = np.zeros(n, dtype=np.int8)
+    lon_rad = np.radians(lon_finite)
+    lat_rad = np.radians(lat_finite)
 
-    if len(time_finite) == 0:
-        lon_copy[:] = np.nan
-        lat_copy[:] = np.nan
-        return lon_copy, lat_copy, time_copy, validate_mask
+    # 1) Разбиение по скорости между соседними finite-точками
+    dist = segment_distances(lat_rad, lon_rad)
+    dt = np.diff(time_finite)
 
-    if len(time_finite) == 1:
-        validate_mask[finite_idx[0]] = 1
-        return lon_copy, lat_copy, time_copy, validate_mask
+    speed = np.full_like(dist, np.inf, dtype=float)
+    valid_dt_mask = np.isfinite(dt) & (dt > 0)
+    speed[valid_dt_mask] = dist[valid_dt_mask] / dt[valid_dt_mask]
 
-    distance = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-        lat_finite, lon_finite
-    )
-    diff_time = np.diff(time_finite)
+    split_index = np.flatnonzero(speed > speed_threshold) + 1
+    chunks = np.split(np.arange(finite_idx.size), split_index)
 
-    speed = distance / diff_time
-    split_index = np.where(speed > speed_threshold)[0] + 1
-
-    chunks = np.split(np.arange(len(time_finite)), split_index)
-    intervals: List[Tuple[int, int]] = [
-        (int(chunk[0]), int(chunk[-1])) for chunk in chunks if chunk.size > 0
+    speed_intervals = [
+        (int(chunk[0]), int(chunk[-1]))
+        for chunk in chunks
+        if chunk.size > 0
     ]
 
-    if not intervals:
+    # 2) Дробление каждого speed-интервала на куски по max_points_in_interval
+    sub_intervals: List[Tuple[int, int]] = []
+    for start, end in speed_intervals:
+        sub_intervals.extend(
+            _split_interval_by_max_points(start, end, max_points_in_interval)
+        )
+
+    if not sub_intervals:
         return lon_copy, lat_copy, time_copy, validate_mask
 
-    # Первый интервал всегда валидный
-    first_start, first_end = intervals[0]
-    validate_mask[finite_idx[first_start : first_end + 1]] = 1
+    # 3) Проверка взаимной достижимости между получившимися кусками
+    first_start, first_end = sub_intervals[0]
+    validate_mask[finite_idx[first_start: first_end + 1]] = 1
     last_valid_end = first_end
 
-    for start, end in intervals[1:]:
-        dt = time_finite[start] - time_finite[last_valid_end]
-
-        if not np.isfinite(dt) or dt <= 0:
+    for start, end in sub_intervals[1:]:
+        dt_bridge = time_finite[start] - time_finite[last_valid_end]
+        if not np.isfinite(dt_bridge) or dt_bridge <= 0:
             continue
 
-        dist = haversine_single(
+        bridge_dist = haversine_single(
             np.radians(lat_finite[last_valid_end]),
             np.radians(lon_finite[last_valid_end]),
             np.radians(lat_finite[start]),
             np.radians(lon_finite[start]),
         )
-        bridge_speed = dist / dt
+        bridge_speed = bridge_dist / dt_bridge
 
         if bridge_speed < speed_threshold:
-            validate_mask[finite_idx[start : end + 1]] = 1
+            validate_mask[finite_idx[start: end + 1]] = 1
             last_valid_end = end
 
     return lon_copy, lat_copy, time_copy, validate_mask
@@ -138,11 +164,12 @@ if __name__ == "__main__":
         lon_df, lat_df, time_df = processor.get_lon_lat(df)
 
         start_time = time.time()
-        check_lon, check_lat, check_time, check_validate_point = filter_intervals(
+        check_lon, check_lat, check_time, check_validate_point = filter_intervals_by_speed_reachability_and_max_points(
             lon_df,
             lat_df,
             time_df,
             speed_threshold=20.0,
+            max_points_in_interval=MAX_POINTS_IN_INTERVAL
         )
         end_time = time.time()
         execution_time = end_time - start_time
@@ -198,3 +225,4 @@ if __name__ == "__main__":
                 number = i // step
                 path = path_dir / f"experiment_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
+                
