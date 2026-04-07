@@ -1,6 +1,8 @@
+from pathlib import Path
+
 import pandas as pd
-from help_scripts.IOPs_geojson import IOPs_geojson
-from settings.settings import DefaultLocate
+
+from app.help_scripts.IOPs_geojson import IOPs_geojson
 
 name = "2_part_1.csv"
 
@@ -19,8 +21,9 @@ def get_mask_from_segments(df, segments, column_name="time"):
 
 
 def main():
+    # pylint: disable=missing-function-docstring
     # Чтение исходного файла
-    df = pd.read_csv(DefaultLocate.DATA_PREPROCESSED_DIR / name)
+    df = pd.read_csv(Path(__file__).parent)
 
     # --- 1. Определение списков интервалов ---
 
@@ -204,7 +207,7 @@ def main():
     # --- 4. Запись модифицированного CSV ---
     # Сохраняем ПОЛНЫЙ датафрейм (копию исходного) с добавленным столбцом validity_point
 
-    path_csv = DefaultLocate.DATA_POSTPROCESSED_DIR / name
+    path_csv = Path(__file__).parent / name
     df.to_csv(path_csv, index=False)
     print(f"CSV сохранен: {path_csv}")
 
@@ -216,7 +219,7 @@ def main():
     df_gj1 = df[mask_gj1]
 
     if not df_gj1.empty:
-        path_gj1 = DefaultLocate.OUTPUT_DIR / "valid_points_intersection.geojson"
+        path_gj1 = Path(__file__).parent / "valid_points_intersection.geojson"
         IOPs_geojson.write_geojson_from_arrays(
             output_path=path_gj1,
             list_arrays=[
@@ -242,7 +245,7 @@ def main():
     )  # Убираем NaN, так как геометрия невозможна
 
     if not df_gj2.empty:
-        path_gj2 = DefaultLocate.OUTPUT_DIR / "remainder_points.geojson"
+        path_gj2 = Path(__file__).parent / "remainder_points.geojson"
         IOPs_geojson.write_geojson_from_arrays(
             output_path=path_gj2,
             list_arrays=[

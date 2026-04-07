@@ -1,21 +1,18 @@
 from pathlib import Path
 
-import numpy as np
-
-from app.help_scripts.calculator_distances_length_large_circle import CalculatorDistancesLengthLargeCircle
-from app.working.kalman_filter_rw import KalmanFilterRW
-from app.working.kalman_filter_cv import KalmanFilterCV
 from app.help_scripts.IOPs_geojson import IOPs_geojson
 from app.working.data_processor import DataProcessor
+from app.working.kalman_filter_cv import KalmanFilterCV
+from app.working.kalman_filter_rw import KalmanFilterRW
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     project_root = Path(__file__).parent.parent.parent
-    data_path = project_root / 'data' / 'post_processing' / 'example.csv'
+    data_path = project_root / "data" / "post_processing" / "example.csv"
     processor = DataProcessor()
 
     df = processor.load_csv(data_path)
     list_valid_df, list_invalid_df = processor.parse_intervals(df, 1000000, 1000000)
-    
+
     # valid_counts = []
     # for i, v_df in enumerate(list_invalid_df):
     #     count = v_df[['lon', 'lat']].notna().all(axis=1).sum()
@@ -36,27 +33,40 @@ if __name__ == '__main__':
     # for idx, count in top_10:
     #     print(f"Индекс {idx}: {count} записей")
 
-
     valid_index = 379, 174, 166, 411, 167, 371, 348, 421
-    invalid_index = 85, 2844, 1474, 2521, 3260, 3231, 1051, 2083, 1798, 1289, 1720, 1115, 3279
+    invalid_index = (
+        85,
+        2844,
+        1474,
+        2521,
+        3260,
+        3231,
+        1051,
+        2083,
+        1798,
+        1289,
+        1720,
+        1115,
+        3279,
+    )
     index = 3279
 
     df = list_invalid_df[index]
 
     lon, lat, time = processor.get_lon_lat(df)
 
-    path = project_root / 'invalid_interval.geojson'
+    path = project_root / "invalid_interval.geojson"
     IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
 
     x, y = processor.convert_to_local_cartesian(lon, lat)
 
     kf = KalmanFilterRW(sigma_acc=0.0001 * 0.04, sigma_meas=1 * 2.4)
 
-    path_true = project_root / 'false_RW_13.png'
+    path_true = project_root / "false_RW_13.png"
     _, _, likelihood = kf.filter(x, y, time)
     likelihood = likelihood.tolist()
     DataProcessor.plot_array_and_hist(likelihood, bins=100, save_path=path_true)
-    print('false_RW.png')
+    print("false_RW.png")
 
     # path_false = project_root / 'false_RW.png'
     # _, _, likelihood = kf.filter(x, y, time)
@@ -65,11 +75,11 @@ if __name__ == '__main__':
 
     kf = KalmanFilterCV(sigma_acc=0.0001 * 0.04, sigma_meas=1 * 2.4)
 
-    path_true = project_root / 'false_CV_13.png'
+    path_true = project_root / "false_CV_13.png"
     _, _, likelihood = kf.filter(x, y, time)
     likelihood = likelihood.tolist()
     DataProcessor.plot_array_and_hist(likelihood, bins=100, save_path=path_true)
-    print('false_CV.png')
+    print("false_CV.png")
 
     # path_false = project_root / 'false_CV.png'
     # _, _, likelihood = kf.filter(x, y, time)

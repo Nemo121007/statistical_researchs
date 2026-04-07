@@ -158,7 +158,6 @@ class CalculatorDistancesLengthLargeCircle:
         Args:
             lat: Широта(ы)
             lon: Долгота(ы)
-            name: Имя переменной для сообщений об ошибках
         Raises:
             ValueError: Если координаты некорректны
         """

@@ -1,6 +1,7 @@
 """Скрипт для измерения и сравнения производительности и точности"""
 
 import time
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -35,7 +36,10 @@ def spherical_law_of_cosines_distance(lat1, lon1, lat2, lon2):
 
 
 def main():
-    path_file = DefaultLocate.DATA_RAW_DIR
+    # pylint: disable=missing-function-docstring
+    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-statements
+    path_file = Path(__file__).parent
     files = [file.name for file in path_file.glob("*.csv")]
 
     results_list = []
@@ -155,7 +159,7 @@ def main():
         print("\n--- Итоговые результаты ---")
         print(result_df)
 
-        path = DefaultLocate.DATA_DIR / "results_distance_comparison.csv"
+        path = Path(__file__).parent / "results_distance_comparison.csv"
         # Сохранить result в CSV файл
         result_df.to_csv(path, index=False)
         print(f"\nРезультаты сохранены в файл: {path}")

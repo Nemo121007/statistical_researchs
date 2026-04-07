@@ -1,9 +1,7 @@
 from pathlib import Path
-from typing import Tuple, List
+from typing import Tuple
 
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 
 from app.working.data_processor import DataProcessor
 
@@ -22,7 +20,10 @@ class KalmanFilterRW:
         self.sigma_acc = sigma_acc
         self.sigma_meas = sigma_meas
 
-    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def filter(
+        self, x: np.ndarray, y: np.ndarray, time: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        # pylint: disable=too-many-locals
         """
         Применяет фильтр Калмана к траектории и вычисляет логарифм правдоподобия.
 
@@ -49,13 +50,13 @@ class KalmanFilterRW:
         H = np.eye(n_dim)
 
         # Ковариация шума измерений R
-        R = np.eye(n_dim) * (self.sigma_meas ** 2)
+        R = np.eye(n_dim) * (self.sigma_meas**2)
 
         # Инициализация состояния X_state = [x, y]
         X_state = np.array([x[0], y[0]]).reshape(n_dim, 1)
 
         # Инициализация ковариации ошибки P
-        P = np.eye(n_dim) * (self.sigma_meas ** 2)
+        P = np.eye(n_dim) * (self.sigma_meas**2)
 
         # Массивы для результатов
         filtered_x = np.zeros(len(x))
@@ -76,7 +77,7 @@ class KalmanFilterRW:
                 dt = 1e-5
 
             # --- Формирование матрицы шума процесса Q ---
-            Q = np.eye(n_dim) * (self.sigma_acc ** 2 * dt)
+            Q = np.eye(n_dim) * (self.sigma_acc**2 * dt)
 
             # --- Prediction (Этап предсказания) ---
             X_pred = F @ X_state
@@ -97,7 +98,9 @@ class KalmanFilterRW:
             if det_S > 0:
                 S_inv = np.linalg.inv(S)
                 mahalanobis_dist = (y_err.T @ S_inv @ y_err).item()
-                likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
+                likelihood[k] = -0.5 * (
+                    dim * log_2pi + np.log(det_S) + mahalanobis_dist
+                )
             else:
                 # Защита: если матрица вырождена, используем псевдообратную матрицу
                 # для продолжения фильтрации, но правдоподобие не считаем
@@ -118,15 +121,15 @@ class KalmanFilterRW:
         return filtered_x, filtered_y, likelihood
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Определение путей
     project_root = Path(__file__).parent.parent.parent
-    data_path = project_root / 'data' / 'post_processing' / 'example.csv'
+    data_path = project_root / "data" / "post_processing" / "example.csv"
 
     # Директории для сохранения картинок
-    pict_dir = project_root / 'data' / 'pict'
-    true_dir = pict_dir / 'true'
-    false_dir = pict_dir / 'false'
+    pict_dir = project_root / "data" / "pict"
+    true_dir = pict_dir / "true"
+    false_dir = pict_dir / "false"
 
     # Инициализация директорий
     true_dir.mkdir(parents=True, exist_ok=True)
@@ -137,16 +140,20 @@ if __name__ == '__main__':
 
     # Параметры фильтра идентичны для обоих списков, поэтому создаем один экземпляр
     # (метод filter сбрасывает состояние внутри себя)
-    kf = KalmanFilterRW(sigma_proc=0.0001 * 0.04, sigma_meas=1 * 2.4)
+    kf = KalmanFilterRW(sigma_acc=0.0001 * 0.04, sigma_meas=1 * 2.4)
 
     # Загрузка и парсинг
     df = processor.load_csv(data_path)
     list_valid_df, list_invalid_df = processor.parse_intervals(df)
 
     # Обработка валидных интервалов
-    processor.process_track_list(list_valid_df, true_dir, processor, kf, "валидных интервалов")
+    processor.process_track_list(
+        list_valid_df, true_dir, processor, kf, "валидных интервалов"
+    )
 
     # Обработка невалидных интервалов
-    processor.process_track_list(list_invalid_df, false_dir, processor, kf, "невалидных интервалов")
+    processor.process_track_list(
+        list_invalid_df, false_dir, processor, kf, "невалидных интервалов"
+    )
 
     print("Готово.")

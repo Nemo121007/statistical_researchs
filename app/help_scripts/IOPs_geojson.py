@@ -1,22 +1,20 @@
-# pylint: disable=invalid-name
 """Класс для операций ввода-вывода GeoJSON."""
 
-import json
 import logging
-from json import JSONDecodeError
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 import geojson
 import numpy as np
 from geojson import Feature
+
 # from help_scripts.area_collector import AreaCollector
 # from help_scripts.area_model import Area
 # from help_scripts.node_collector import NodeCollector
 # from help_scripts.node_model import Node
 # from help_scripts.way_collector import WayCollector
 # from help_scripts.way_model import Way
-from shapely.geometry import LineString, Polygon
+# from shapely.geometry import LineString, Polygon
 
 
 class IOPs_geojson:
@@ -132,7 +130,9 @@ class IOPs_geojson:
         with open(output_path, "w", encoding="utf-8") as f:
             geojson.dump(features_collection, f, ensure_ascii=False, indent=2)
         logging.info(
-            f"GeoJSON файл записан в {str(output_path)} с {len(features_collection.features)} объектами"
+            "GeoJSON файл записан в %s с %s объектами",
+            str(output_path),
+            len(features_collection.features),
         )
 
     # @staticmethod

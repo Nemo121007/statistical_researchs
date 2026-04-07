@@ -1,5 +1,6 @@
+import time
 from pathlib import Path
-from typing import List, Tuple, Dict, Union
+from typing import Dict, Union
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,7 @@ class CalculatingStatistics:
     def calculate_statistics(
         experimental_df: pd.DataFrame,
         control_df: pd.DataFrame,
+        time_working: np.ndarray,
         output_path_log: Path = None,
     ) -> str:
         """
@@ -39,51 +41,45 @@ class CalculatingStatistics:
             "=" * 50,
             "REPORT: Route Validation Statistics",
             "=" * 50,
-
             "\n[1] Point Metrics (Counts)",
             f"  Count valid point in control_df:      {stat_point['count_valid_point_control_df']}",
             f"  Count valid point in experimental_df: {stat_point['count_valid_point_experimental_df']}",
             f"  Count valid point in merge_df:        {stat_point['count_valid_point_merge_df']}",
-
             "-" * 50,
             f"  True Positives (TP):  {stat_point['TP']}",
             f"  False Positives (FP): {stat_point['FP']}",
             f"  False Negatives (FN): {stat_point['FN']}",
             f"  True Negatives (TN):  {stat_point['TN']}",
             f"  In_water:             {stat_point['in_water']}",
-
             "-" * 50,
             f"  Accuracy:   {stat_point['accuracy']:.4f}",
             f"  Precision:  {stat_point['precision']:.4f}",
             f"  Recall:     {stat_point['recall']:.4f}",
             f"  F1 Score:   {stat_point['f_score']:.4f}",
-
             "\n[2] Length Metrics (Meters)",
             f"  Count valid edges in control_df:      {stat_edge['count_valid_edge_control_df']}",
             f"  Count valid edges in experimental_df: {stat_edge['count_valid_edge_experimental_df']}",
             f"  Count valid edges in merge_df:        {stat_edge['count_valid_edge_merge_df']}",
             f"  Length valid edges in control_df:     {lengths['ctrl_distance']}",
             f"  Length valid edges in experimental_df:{lengths['exp_distance']}",
-
             "-" * 50,
             f"  True Positives (TP):  {stat_edge['TP']}",
             f"  False Positives (FP): {stat_edge['FP']}",
             f"  False Negatives (FN): {stat_edge['FN']}",
             f"  True Negatives (TN):  {stat_edge['TN']}",
             f"  In_water:             {stat_edge['in_water']}",
-
             "-" * 50,
             f"  Accuracy:   {stat_edge['accuracy']:.4f}",
             f"  Precision:  {stat_edge['precision']:.4f}",
             f"  Recall:     {stat_edge['recall']:.4f}",
             f"  F1 Score:   {stat_edge['f_score']:.4f}",
-
             "-" * 50,
             f"  Length True Positives (TP):  {stat_edge['length_TP']:.4f}",
             f"  Length False Positives (FP): {stat_edge['length_FP']:.4f}",
             f"  Length False Negatives (FN): {stat_edge['length_FN']:.4f}",
             f"  Length True Negatives (TN):  {stat_edge['length_TN']:.4f}",
-
+            "-" * 50,
+            f"  Avg time working:   {np.average(time_working[5:]):.4f}",
             "=" * 50,
         ]
 
@@ -160,6 +156,7 @@ class CalculatingStatistics:
         - experimental edges считаются как соседние точки внутри experimental-трека
         - попадание ребра в воду проверяется по двум точкам ребра
         """
+        # pylint: disable=too-many-locals
 
         required_columns = {
             "ctrl_validate_point",
@@ -240,9 +237,11 @@ class CalculatingStatistics:
             else 0.0
         )
 
-        edge_lengths = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-            merge_df["ctrl_lat"].to_numpy(dtype=float),
-            merge_df["ctrl_lon"].to_numpy(dtype=float),
+        edge_lengths = (
+            CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+                merge_df["ctrl_lat"].to_numpy(dtype=float),
+                merge_df["ctrl_lon"].to_numpy(dtype=float),
+            )
         )
 
         # Длинна считается если оба конца ребра принадлежат к одному ребру
@@ -272,24 +271,28 @@ class CalculatingStatistics:
 
     @staticmethod
     def _get_statistic_abs_length(merge_df: pd.DataFrame) -> Dict[str, float]:
-        mask = merge_df['ctrl_validate_point'] == 1
-        ctrl_lat = (merge_df.loc[mask, 'ctrl_lat']).to_numpy(dtype=float)
-        ctrl_lon = (merge_df.loc[mask, 'ctrl_lon']).to_numpy(dtype=float)
-        ctrl_distance = np.nansum(CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-            ctrl_lat,
-            ctrl_lon,
-        ))
+        mask = merge_df["ctrl_validate_point"] == 1
+        ctrl_lat = (merge_df.loc[mask, "ctrl_lat"]).to_numpy(dtype=float)
+        ctrl_lon = (merge_df.loc[mask, "ctrl_lon"]).to_numpy(dtype=float)
+        ctrl_distance = np.nansum(
+            CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+                ctrl_lat,
+                ctrl_lon,
+            )
+        )
 
-        mask = merge_df['exp_validate_point'] == 1
-        exp_lat = (merge_df.loc[mask, 'exp_lat']).to_numpy(dtype=float)
-        exp_lon = (merge_df.loc[mask, 'exp_lon']).to_numpy(dtype=float)
-        exp_distance = np.nansum(CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-            exp_lat,
-            exp_lon,
-        ))
+        mask = merge_df["exp_validate_point"] == 1
+        exp_lat = (merge_df.loc[mask, "exp_lat"]).to_numpy(dtype=float)
+        exp_lon = (merge_df.loc[mask, "exp_lon"]).to_numpy(dtype=float)
+        exp_distance = np.nansum(
+            CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+                exp_lat,
+                exp_lon,
+            )
+        )
         return {
-            'ctrl_distance': ctrl_distance,
-            'exp_distance': exp_distance,
+            "ctrl_distance": ctrl_distance,
+            "exp_distance": exp_distance,
         }
 
     @staticmethod
@@ -308,7 +311,9 @@ class CalculatingStatistics:
             Объединенный DataFrame с префиксами для каждой колонки.
         """
         if len(experimental_df) != len(control_df):
-            raise ValueError(f"Длинны DF не совпадают: {len(experimental_df)} != {len(control_df)}")
+            raise ValueError(
+                f"Длинны DF не совпадают: {len(experimental_df)} != {len(control_df)}"
+            )
         # Список колонок для слияния (time нужна для _extend_intervals)
         cols_to_merge = ["lat", "lon", "validate_point", "time"]
 
@@ -329,7 +334,7 @@ class CalculatingStatistics:
                 "time": "ctrl_time",
             }
         )
-        ctrl_part['in_water'] = control_df['in_water']
+        ctrl_part["in_water"] = control_df["in_water"]
 
         return pd.concat(
             [exp_part.reset_index(drop=True), ctrl_part.reset_index(drop=True)], axis=1
@@ -353,14 +358,21 @@ if __name__ == "__main__":
     #     'validate_point': [1, 1, 0, 1, 0]
     # }
     # df_exp = pd.DataFrame(data_exp)
-
+    list_time = []
     path = (
         Path(__file__).parent.parent.parent / "data" / "post_processing" / "example.csv"
     )
     df_exp = pd.read_csv(path)
     df_control = pd.read_csv(path)
 
+    for i in range(15):
+        start_time = time.time()
+        end_time = time.time()
+        execution_time = end_time - start_time
+        list_time.append(execution_time)
+
     CalculatingStatistics.calculate_statistics(
         experimental_df=df_exp,
         control_df=df_control,
+        time_working=np.array(list_time),
     )

@@ -1,9 +1,7 @@
 from pathlib import Path
-from typing import Tuple, List
+from typing import Tuple
 
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 
 from app.working.data_processor import DataProcessor
 
@@ -32,9 +30,9 @@ class KalmanFilterCV:
 
     def _get_process_noise_matrix(self, dt: float) -> np.ndarray:
         """Формирует ковариационную матрицу шума процесса Q."""
-        dt2 = dt ** 2
-        dt3 = dt ** 3
-        dt4 = dt ** 4
+        dt2 = dt**2
+        dt3 = dt**3
+        dt4 = dt**4
 
         Q = np.zeros((4, 4))
         Q[0, 0] = dt4 / 4
@@ -47,19 +45,21 @@ class KalmanFilterCV:
         Q[1, 3] = dt3 / 2
         Q[3, 1] = dt3 / 2
 
-        return Q * (self.sigma_acc ** 2)
+        return Q * (self.sigma_acc**2)
 
-    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def filter(
+        # pylint: disable=too-many-locals
+        self, x: np.ndarray, y: np.ndarray, time: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Применяет фильтр Калмана и вычисляет логарифм правдоподобия.
         """
         if len(x) < 2:
             return x, y, np.array([])
 
-        H = np.array([[1, 0, 0, 0],
-                      [0, 1, 0, 0]])
+        H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
 
-        R = np.eye(2) * (self.sigma_meas ** 2)
+        R = np.eye(2) * (self.sigma_meas**2)
 
         X_state = np.array([x[0], y[0], 0.0, 0.0]).reshape(4, 1)
 
@@ -108,7 +108,9 @@ class KalmanFilterCV:
             if det_S > 0:
                 S_inv = np.linalg.inv(S)
                 mahalanobis_dist = (y_err.T @ S_inv @ y_err).item()
-                likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
+                likelihood[k] = -0.5 * (
+                    dim * log_2pi + np.log(det_S) + mahalanobis_dist
+                )
             else:
                 # Защита: если матрица вырождена, используем псевдообратную матрицу
                 # для продолжения фильтрации, но правдоподобие не считаем
@@ -125,15 +127,15 @@ class KalmanFilterCV:
         return filtered_x, filtered_y, likelihood
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Определение путей
     project_root = Path(__file__).parent.parent.parent
-    data_path = project_root / 'data' / 'post_processing' / 'example.csv'
+    data_path = project_root / "data" / "post_processing" / "example.csv"
 
     # Директории для сохранения картинок
-    pict_dir = project_root / 'data' / 'pict'
-    true_dir = pict_dir / 'true'
-    false_dir = pict_dir / 'false'
+    pict_dir = project_root / "data" / "pict"
+    true_dir = pict_dir / "true"
+    false_dir = pict_dir / "false"
 
     # Инициализация директорий
     true_dir.mkdir(parents=True, exist_ok=True)
@@ -151,9 +153,13 @@ if __name__ == '__main__':
     list_valid_df, list_invalid_df = processor.parse_intervals(df)
 
     # Обработка валидных интервалов
-    processor.process_track_list(list_valid_df, true_dir, processor, kf, "валидных интервалов")
+    processor.process_track_list(
+        list_valid_df, true_dir, processor, kf, "валидных интервалов"
+    )
 
     # Обработка невалидных интервалов
-    processor.process_track_list(list_invalid_df, false_dir, processor, kf, "невалидных интервалов")
+    processor.process_track_list(
+        list_invalid_df, false_dir, processor, kf, "невалидных интервалов"
+    )
 
     print("Готово.")

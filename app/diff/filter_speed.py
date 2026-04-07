@@ -1,25 +1,34 @@
+import time
 from pathlib import Path
 from typing import Tuple
 
 import numpy as np
 import pandas as pd
 
-from app.working.data_processor import DataProcessor
 from app.help_scripts.calculating_statistics import CalculatingStatistics
-from app.help_scripts.calculator_distances_length_large_circle import CalculatorDistancesLengthLargeCircle
-
+from app.working.data_processor import DataProcessor
 
 EARTH_RADIUS = 6371000  # метры
 
 
-def haversine_single(lat1, lon1, lat2, lon2):
+def haversine_single(lat1, lon1, lat2, lon2) -> float:
+    """
+    Метод, считающий расстояние между двумя точками
+    Args:
+        lat1: широта первой точки
+        lon1: долгота первой точки
+        lat2: широта первой точки
+        lon2: долгота первой точки
+    Returns:
+        Расстояние между двумя точками
+    """
     dlat = lat2 - lat1
     dlon = lon2 - lon1
 
-    a = np.sin(dlat / 2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2)**2
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
     c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
-    return EARTH_RADIUS * c
+    return float(EARTH_RADIUS * c)
 
 
 def filter_speed(
@@ -27,6 +36,15 @@ def filter_speed(
     lat: np.ndarray,
     time: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Метод, фильтрующий временной ряд по скорости
+    Args:
+         lon: Массив долгот
+         lat: Массив широт
+         time: Массив временных меток
+    Returns:
+         Массив долгот, Массив широт, Массив временных меток, Массив флагов валидности точек
+    """
     lon = np.asarray(lon, dtype=float).copy()
     lat = np.asarray(lat, dtype=float).copy()
     time = np.asarray(time).copy()
@@ -77,30 +95,46 @@ def filter_speed(
     return lon, lat, time, mask
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     project_root = Path(__file__).parent.parent.parent
-    data_path = project_root / 'data' / 'post_processing' / 'example.csv'
+    data_path = project_root / "data" / "post_processing" / "example.csv"
+    list_time = []
 
     processor = DataProcessor()
     df = processor.load_csv(data_path)
 
-    lon, lat, time = processor.get_lon_lat(df)
+    for i in range(15):
+        lon_df, lat_df, time_df = processor.get_lon_lat(df)
 
-    check_lon, check_lat, check_time, check_validate_point = filter_speed(lon, lat, time)
+        start_time = time.time()
+        check_lon, check_lat, check_time, check_validate_point = filter_speed(
+            lon_df, lat_df, time_df
+        )
+        end_time = time.time()
+        execution_time = end_time - start_time
+        list_time.append(execution_time)
 
-    control_df = pd.DataFrame({
-        'lon': check_lon,
-        'lat': check_lat,
-        'time': check_time,
-        'validate_point': df['validate_point'].to_numpy(),
-        'in_water': df['in_water'].to_numpy(),
-    })
+        control_df = pd.DataFrame(
+            {
+                "lon": check_lon,
+                "lat": check_lat,
+                "time": check_time,
+                "validate_point": df["validate_point"].to_numpy(),
+                "in_water": df["in_water"].to_numpy(),
+            }
+        )
 
-    experimental_df = pd.DataFrame({
-        'lon': check_lon,
-        'lat': check_lat,
-        'time': check_time,
-        'validate_point': check_validate_point,
-    })
+        experimental_df = pd.DataFrame(
+            {
+                "lon": check_lon,
+                "lat": check_lat,
+                "time": check_time,
+                "validate_point": check_validate_point,
+            }
+        )
+        print(i)
 
-    CalculatingStatistics.calculate_statistics(experimental_df, control_df)
+        if i == 14:
+            CalculatingStatistics.calculate_statistics(
+                experimental_df, control_df, np.array(list_time)
+            )
