@@ -9,6 +9,7 @@ from app.help_scripts.calculating_statistics import CalculatingStatistics
 from app.help_scripts.calculator_distances_length_large_circle import (
     CalculatorDistancesLengthLargeCircle,
 )
+from app.help_scripts.IOPs_geojson import IOPs_geojson
 from app.working.data_processor import DataProcessor
 
 EARTH_RADIUS = 6371000.0  # meters
@@ -164,3 +165,29 @@ if __name__ == "__main__":
             CalculatingStatistics.calculate_statistics(
                 experimental_df, control_df, np.array(list_time)
             )
+
+            mask = df["validate_point"].to_numpy() == 1
+            lon_df = np.where(mask, lon_df, np.nan)
+            lat_df = np.where(mask, lat_df, np.nan)
+
+            mask = check_validate_point == 1
+            check_lon = np.where(mask, check_lon, np.nan)
+            check_lat = np.where(mask, check_lat, np.nan)
+
+            step = 100000
+            path_dir = Path(__file__).parent.parent.parent
+            for i in range(0, len(lon_df), step):
+                lon = lon_df[i : i + step]
+                lat = lat_df[i : i + step]
+                time = time_df[i : i + step]
+                number = i // step
+                path = path_dir / f"control_{number}.geojson"
+                IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
+
+            for i in range(0, len(lon_df), step):
+                lon = check_lon[i : i + step]
+                lat = check_lat[i : i + step]
+                time = check_time[i : i + step]
+                number = i // step
+                path = path_dir / f"experiment_{number}.geojson"
+                IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])

@@ -49,7 +49,10 @@ class KalmanFilterCV:
 
     def filter(
         # pylint: disable=too-many-locals
-        self, x: np.ndarray, y: np.ndarray, time: np.ndarray
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        time: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Применяет фильтр Калмана и вычисляет логарифм правдоподобия.
