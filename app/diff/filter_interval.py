@@ -83,18 +83,14 @@ def filter_intervals(
         validate_mask[finite_idx[0]] = 1
         return lon_copy, lat_copy, time_copy, validate_mask
 
-    distance = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-        lat_finite, lon_finite
-    )
+    distance = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat_finite, lon_finite)
     diff_time = np.diff(time_finite)
 
     speed = distance / diff_time
     split_index = np.where(speed > speed_threshold)[0] + 1
 
     chunks = np.split(np.arange(len(time_finite)), split_index)
-    intervals: List[Tuple[int, int]] = [
-        (int(chunk[0]), int(chunk[-1])) for chunk in chunks if chunk.size > 0
-    ]
+    intervals: List[Tuple[int, int]] = [(int(chunk[0]), int(chunk[-1])) for chunk in chunks if chunk.size > 0]
 
     if not intervals:
         return lon_copy, lat_copy, time_copy, validate_mask
@@ -168,9 +164,7 @@ if __name__ == "__main__":
         print(i)
 
         if i == 14:
-            CalculatingStatistics.calculate_statistics(
-                experimental_df, control_df, np.array(list_time)
-            )
+            CalculatingStatistics.calculate_statistics(experimental_df, control_df, np.array(list_time))
 
             mask = df["validate_point"].to_numpy() == 1
             lon_df = np.where(mask, lon_df, np.nan)
@@ -183,17 +177,19 @@ if __name__ == "__main__":
             step = 100000
             path_dir = Path(__file__).parent.parent.parent
             for i in range(0, len(lon_df), step):
-                lon = lon_df[i : i + step]
-                lat = lat_df[i : i + step]
-                time = time_df[i : i + step]
+                end_i = i + step
+                lon = lon_df[i:end_i]
+                lat = lat_df[i:end_i]
+                time = time_df[i:end_i]
                 number = i // step
                 path = path_dir / f"control_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
 
             for i in range(0, len(lon_df), step):
-                lon = check_lon[i : i + step]
-                lat = check_lat[i : i + step]
-                time = check_time[i : i + step]
+                end_i = i + step
+                lon = check_lon[i:end_i]
+                lat = check_lat[i:end_i]
+                time = check_time[i:end_i]
                 number = i // step
                 path = path_dir / f"experiment_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])

@@ -1,0 +1,75 @@
+[project]
+name = "statistical_researchs"
+version = "0.1.0"
+description = "A statistical research project"
+dependencies = [
+    "numpy>=1.26.0",
+    "pandas>=2.1.0",
+    "pykalman>=0.9.7",
+    "geojson>=3.1.0",
+    "shapely>=2.0.0",
+    "matplotlib>=3.10.7",
+    "geopy>=2.4.0",
+    "tqdm>=4.66.0",
+    "black>=23.3.0",
+    "pylint>=2.15.0",
+    "isort>=8.0.1"
+]
+
+[tool.black]
+line-length = 120
+target-version = ['py312']
+# Опций для управления пробелами в срезах (типа [i : i+step]) в Black не существует
+
+[tool.pylint.main]
+fail-under = 10
+ignore = ["CVS", ".venv", "venv"]
+ignore-paths = ["\\.venv/.*"]
+jobs = 1
+py-version = "3.12"
+
+[tool.pylint.basic]
+good-names = ["i", "j", "k", "ex", "Run", "_"]
+
+[tool.pylint.design]
+max-args = 5
+max-attributes = 7
+max-bool-expr = 5
+max-branches = 12
+max-locals = 20
+max-parents = 7
+max-public-methods = 20
+max-returns = 6
+max-statements = 50
+min-public-methods = 2
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pylint.messages_control]
+disable = [
+    "raw-checker-failed",
+    "bad-inline-option",
+    "locally-disabled",
+    "file-ignored",
+    "suppressed-message",
+    "useless-suppression",
+    "deprecated-pragma",
+    "use-symbolic-message-instead",
+    "use-implicit-booleaness-not-comparison-to-string",
+    "use-implicit-booleaness-not-comparison-to-zero",
+    "missing-module-docstring",
+    "redefined-outer-name",
+    "invalid-name",
+    "too-few-public-methods",
+    "duplicate-code",
+    "too-many-arguments",
+    "too-many-positional-arguments"
+]
+
+[tool.pylint.similarities]
+ignore-comments = true
+ignore-docstrings = true
+ignore-imports = true
+ignore-signatures = true
+min-similarity-lines = 4

@@ -49,10 +49,7 @@ def segment_distances(lat_rad: np.ndarray, lon_rad: np.ndarray) -> np.ndarray:
     dlat = np.diff(lat_rad)
     dlon = np.diff(lon_rad)
 
-    a = (
-        np.sin(dlat / 2.0) ** 2
-        + np.cos(lat_rad[:-1]) * np.cos(lat_rad[1:]) * np.sin(dlon / 2.0) ** 2
-    )
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat_rad[:-1]) * np.cos(lat_rad[1:]) * np.sin(dlon / 2.0) ** 2
     c = 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
     return EARTH_RADIUS * c
 
@@ -116,15 +113,11 @@ def _split_by_speed_and_max_points(
     split_index = np.flatnonzero(speed > speed_threshold) + 1
     chunks = np.split(np.arange(len(time_finite)), split_index)
 
-    speed_intervals = [
-        (int(chunk[0]), int(chunk[-1])) for chunk in chunks if chunk.size > 0
-    ]
+    speed_intervals = [(int(chunk[0]), int(chunk[-1])) for chunk in chunks if chunk.size > 0]
 
     sub_intervals: List[Tuple[int, int]] = []
     for start, end in speed_intervals:
-        sub_intervals.extend(
-            _split_interval_by_max_points(start, end, max_points_in_interval)
-        )
+        sub_intervals.extend(_split_interval_by_max_points(start, end, max_points_in_interval))
 
     return sub_intervals
 
@@ -283,14 +276,12 @@ if __name__ == "__main__":
         lon_df, lat_df, time_df = processor.get_lon_lat(df)
 
         start_time = time.time()
-        check_lon, check_lat, check_time, check_validate_point = (
-            filter_intervals_neighbor_reachability(
-                lon_df,
-                lat_df,
-                time_df,
-                speed_threshold=20.0,
-                neighbors_each_side=2,
-            )
+        check_lon, check_lat, check_time, check_validate_point = filter_intervals_neighbor_reachability(
+            lon_df,
+            lat_df,
+            time_df,
+            speed_threshold=20.0,
+            neighbors_each_side=2,
         )
         end_time = time.time()
         execution_time = end_time - start_time
@@ -317,9 +308,7 @@ if __name__ == "__main__":
         print(i)
 
         if i == 14:
-            CalculatingStatistics.calculate_statistics(
-                experimental_df, control_df, np.array(list_time)
-            )
+            CalculatingStatistics.calculate_statistics(experimental_df, control_df, np.array(list_time))
 
             mask = df["validate_point"].to_numpy() == 1
             lon_df = np.where(mask, lon_df, np.nan)
@@ -332,17 +321,19 @@ if __name__ == "__main__":
             step = 100000
             path_dir = Path(__file__).parent.parent.parent
             for i in range(0, len(lon_df), step):
-                lon = lon_df[i : i + step]
-                lat = lat_df[i : i + step]
-                time = time_df[i : i + step]
+                end_i = i + step
+                lon = lon_df[i:end_i]
+                lat = lat_df[i:end_i]
+                time = time_df[i:end_i]
                 number = i // step
                 path = path_dir / f"control_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
 
             for i in range(0, len(lon_df), step):
-                lon = check_lon[i : i + step]
-                lat = check_lat[i : i + step]
-                time = check_time[i : i + step]
+                end_i = i + step
+                lon = check_lon[i:end_i]
+                lat = check_lat[i:end_i]
+                time = check_time[i:end_i]
                 number = i // step
                 path = path_dir / f"experiment_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])

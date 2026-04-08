@@ -18,9 +18,7 @@ class CalculatorDistancesLengthLargeCircle:
     Earth_radius_meters: float = 6371000
 
     @staticmethod
-    def vectorized_min_distance_to_points(
-        lat1: float, lon1: float, lat2: np.ndarray, lon2: np.ndarray
-    ) -> np.ndarray:
+    def vectorized_min_distance_to_points(lat1: float, lon1: float, lat2: np.ndarray, lon2: np.ndarray) -> np.ndarray:
         """Вычисляет расстояния от точки до набора точек.
         Args:
             lat1: Широта точки в градусах [-90, 90].
@@ -45,14 +43,10 @@ class CalculatorDistancesLengthLargeCircle:
         lat2_rad = np.radians(lat2)
         lon2_rad = np.radians(lon2)
 
-        return CalculatorDistancesLengthLargeCircle.haversine_distance(
-            lat1_rad, lon1_rad, lat2_rad, lon2_rad
-        )
+        return CalculatorDistancesLengthLargeCircle.haversine_distance(lat1_rad, lon1_rad, lat2_rad, lon2_rad)
 
     @staticmethod
-    def vectorized_segment_distances(
-        lat_array: np.ndarray, lon_array: np.ndarray
-    ) -> NDArray[np.float64]:
+    def vectorized_segment_distances(lat_array: np.ndarray, lon_array: np.ndarray) -> NDArray[np.float64]:
         """Векторизованное вычисление расстояний между последовательными точками сегмента.
         Args:
             lat_array: Массив широт сегмента формы [N].
@@ -69,9 +63,7 @@ class CalculatorDistancesLengthLargeCircle:
         if lat_array.shape[0] < 2:
             raise ValueError("Сегмент должен содержать хотя бы 2 точки")
 
-        CalculatorDistancesLengthLargeCircle._validate_coordinates(
-            lat=lat_array, lon=lon_array
-        )
+        CalculatorDistancesLengthLargeCircle._validate_coordinates(lat=lat_array, lon=lon_array)
 
         # Все точки, кроме последней
         lat1 = lat_array[:-1]
@@ -86,14 +78,10 @@ class CalculatorDistancesLengthLargeCircle:
         lat2_rad = np.radians(lat2)
         lon2_rad = np.radians(lon2)
 
-        return CalculatorDistancesLengthLargeCircle.haversine_distance(
-            lat1_rad, lon1_rad, lat2_rad, lon2_rad
-        )
+        return CalculatorDistancesLengthLargeCircle.haversine_distance(lat1_rad, lon1_rad, lat2_rad, lon2_rad)
 
     @staticmethod
-    def vectorized_great_circle_distance(
-        lat1: np.ndarray, lon1: np.ndarray, lat2: np.ndarray, lon2: np.ndarray
-    ):
+    def vectorized_great_circle_distance(lat1: np.ndarray, lon1: np.ndarray, lat2: np.ndarray, lon2: np.ndarray):
         """Вычисляет расстояния по большому кругу между массивами точек.
         Args:
             lat1: Массив широт первых точек в градусах [-90, 90].
@@ -118,9 +106,7 @@ class CalculatorDistancesLengthLargeCircle:
         lat2_rad = np.radians(lat2)
         lon2_rad = np.radians(lon2)
 
-        return CalculatorDistancesLengthLargeCircle.haversine_distance(
-            lat1_rad, lon1_rad, lat2_rad, lon2_rad
-        )
+        return CalculatorDistancesLengthLargeCircle.haversine_distance(lat1_rad, lon1_rad, lat2_rad, lon2_rad)
 
     @staticmethod
     def haversine_distance(
@@ -141,10 +127,7 @@ class CalculatorDistancesLengthLargeCircle:
         dlat = lat2_rad - lat1_rad
         dlon = lon2_rad - lon1_rad
 
-        a = (
-            np.sin(dlat / 2) ** 2
-            + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon / 2) ** 2
-        )
+        a = np.sin(dlat / 2) ** 2 + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon / 2) ** 2
         c = 2 * np.arcsin(np.sqrt(a))
 
         return CalculatorDistancesLengthLargeCircle.Earth_radius_meters * c
@@ -170,16 +153,8 @@ class CalculatorDistancesLengthLargeCircle:
         lon_valid = ~np.isnan(lon_arr)
 
         # Проверяем диапазоны только для валидных значений
-        if np.any(lat_valid) and (
-            np.any(lat_arr[lat_valid] < -90) or np.any(lat_arr[lat_valid] > 90)
-        ):
-            raise ValueError(
-                f"{(lon_arr, lat_arr)}: Широта должна быть в диапазоне [-90, 90]"
-            )
+        if np.any(lat_valid) and (np.any(lat_arr[lat_valid] < -90) or np.any(lat_arr[lat_valid] > 90)):
+            raise ValueError(f"{(lon_arr, lat_arr)}: Широта должна быть в диапазоне [-90, 90]")
 
-        if np.any(lon_valid) and (
-            np.any(lon_arr[lon_valid] < -180) or np.any(lon_arr[lon_valid] > 180)
-        ):
-            raise ValueError(
-                f"{(lon_arr, lat_arr)}: Долгота должна быть в диапазоне [-180, 180]"
-            )
+        if np.any(lon_valid) and (np.any(lon_arr[lon_valid] < -180) or np.any(lon_arr[lon_valid] > 180)):
+            raise ValueError(f"{(lon_arr, lat_arr)}: Долгота должна быть в диапазоне [-180, 180]")

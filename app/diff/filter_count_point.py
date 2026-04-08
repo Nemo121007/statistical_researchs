@@ -29,29 +29,24 @@ def segment_distances(lat_rad: np.ndarray, lon_rad: np.ndarray) -> np.ndarray:
     dlat = np.diff(lat_rad)
     dlon = np.diff(lon_rad)
 
-    a = (
-        np.sin(dlat / 2.0) ** 2
-        + np.cos(lat_rad[:-1]) * np.cos(lat_rad[1:]) * np.sin(dlon / 2.0) ** 2
-    )
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat_rad[:-1]) * np.cos(lat_rad[1:]) * np.sin(dlon / 2.0) ** 2
     c = 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
     return EARTH_RADIUS * c
 
 
 def _find_chunks_by_speed(
-    lat_rad: np.ndarray,
-    lon_rad: np.ndarray,
-    time_finite: np.ndarray,
-    speed_threshold: float,
+    lat_rad: np.ndarray, lon_rad: np.ndarray, time_finite: np.ndarray, speed_threshold: float
 ) -> list:
     """
     Вспомогательный метод, разделяющий массивы на чанки
     Args:
         lat_rad: Широта точек (в рад.)
         lon_rad: Долгота точек (в рад.)
-        time_finite: Временные метки точек
-        speed_threshold: Предельное значение скорости
+        time_finite:
+        speed_threshold:
+
     Returns:
-        Список кортежей (start_index, end_index) для каждого чанка
+
     """
     dist = segment_distances(lat_rad, lon_rad)
     dt = np.diff(time_finite)
@@ -125,7 +120,7 @@ def filter_intervals_with_min_points(
 
     # Оставляем только интервалы с достаточным числом точек
     for start, end in intervals:
-        if (end - start + 1) >= min_points_in_interval:
+        if end - start + 1 >= min_points_in_interval:
             validate_mask[finite_idx[start : end + 1]] = 1
 
     return lon_copy, lat_copy, time_copy, validate_mask
@@ -143,14 +138,12 @@ if __name__ == "__main__":
         lon_df, lat_df, time_df = processor.get_lon_lat(df)
 
         start_time = time.time()
-        check_lon, check_lat, check_time, check_validate_point = (
-            filter_intervals_with_min_points(
-                lon_df,
-                lat_df,
-                time_df,
-                speed_threshold=20.0,
-                min_points_in_interval=MIN_POINTS_IN_INTERVAL,
-            )
+        check_lon, check_lat, check_time, check_validate_point = filter_intervals_with_min_points(
+            lon_df,
+            lat_df,
+            time_df,
+            speed_threshold=20.0,
+            min_points_in_interval=MIN_POINTS_IN_INTERVAL,
         )
         end_time = time.time()
         execution_time = end_time - start_time
@@ -177,9 +170,7 @@ if __name__ == "__main__":
         print(i)
 
         if i == 14:
-            CalculatingStatistics.calculate_statistics(
-                experimental_df, control_df, np.array(list_time)
-            )
+            CalculatingStatistics.calculate_statistics(experimental_df, control_df, np.array(list_time))
 
             mask = df["validate_point"].to_numpy() == 1
             lon_df = np.where(mask, lon_df, np.nan)
@@ -192,17 +183,19 @@ if __name__ == "__main__":
             step = 100000
             path_dir = Path(__file__).parent.parent.parent
             for i in range(0, len(lon_df), step):
-                lon = lon_df[i : i + step]
-                lat = lat_df[i : i + step]
-                time = time_df[i : i + step]
+                end_i = i + step
+                lon = lon_df[i:end_i]
+                lat = lat_df[i:end_i]
+                time = time_df[i:end_i]
                 number = i // step
                 path = path_dir / f"control_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
 
             for i in range(0, len(lon_df), step):
-                lon = check_lon[i : i + step]
-                lat = check_lat[i : i + step]
-                time = check_time[i : i + step]
+                end_i = i + step
+                lon = check_lon[i:end_i]
+                lat = check_lat[i:end_i]
+                time = check_time[i:end_i]
                 number = i // step
                 path = path_dir / f"experiment_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])

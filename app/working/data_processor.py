@@ -25,12 +25,8 @@ class DataProcessor:
         """
         Разбивает DataFrame на списки валидных и невалидных интервалов.
         """
-        list_valid_df = self._extend_intervals(
-            df, target_point=1, n=n, distance_threshold=distance_threshold
-        )
-        list_invalid_df = self._extend_intervals(
-            df, target_point=-1, n=n, distance_threshold=distance_threshold
-        )
+        list_valid_df = self._extend_intervals(df, target_point=1, n=n, distance_threshold=distance_threshold)
+        list_invalid_df = self._extend_intervals(df, target_point=-1, n=n, distance_threshold=distance_threshold)
         return list_valid_df, list_invalid_df
 
     def _extend_intervals(
@@ -68,11 +64,7 @@ class DataProcessor:
                 lon_ends = np.array([lons[chunk_start_idx], lons[i]])
                 lat_ends = np.array([lats[chunk_start_idx], lats[i]])
                 distance = float(
-                    np.nansum(
-                        CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-                            lat_ends, lon_ends
-                        )
-                    )
+                    np.nansum(CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat_ends, lon_ends))
                 )
 
                 if (i - chunk_start_idx + 1) >= n or distance >= distance_threshold:
@@ -89,9 +81,7 @@ class DataProcessor:
         """Извлекает массивы долгот, широт и времени"""
         return df["lon"].to_numpy(), df["lat"].to_numpy(), df["time"].to_numpy()
 
-    def convert_to_local_cartesian(
-        self, lon: np.ndarray, lat: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    def convert_to_local_cartesian(self, lon: np.ndarray, lat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Переводит сферические координаты (lon, lat) в локальные прямоугольные (x, y) в метрах.
         """
@@ -105,9 +95,7 @@ class DataProcessor:
         valid_indices = np.where(valid_mask)[0]
 
         if len(valid_indices) == 0:
-            return np.full_like(lon, np.nan, dtype=float), np.full_like(
-                lat, np.nan, dtype=float
-            )
+            return np.full_like(lon, np.nan, dtype=float), np.full_like(lat, np.nan, dtype=float)
 
         first_valid_idx = valid_indices[0]
         lat0 = lat[first_valid_idx]
@@ -213,9 +201,7 @@ class DataProcessor:
         clean_arr = arr_np[~np.isnan(arr_np)]
 
         if len(clean_arr) == 0:
-            print(
-                "Предупреждение: массив пуст или содержит только NaN. График не строится."
-            )
+            print("Предупреждение: массив пуст или содержит только NaN. График не строится.")
             return
 
         # --- СОЗДАНИЕ ГРАФИКОВ ---

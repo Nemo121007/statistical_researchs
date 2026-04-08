@@ -121,11 +121,7 @@ class CalculatingStatistics:
         accuracy = (TP + TN) / total if total > 0 else 0.0
         precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
         recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
-        f_score = (
-            2 * precision * recall / (precision + recall)
-            if (precision + recall) > 0
-            else 0.0
-        )
+        f_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
         return {
             "count_valid_point_control_df": count_valid_point_control_df,
@@ -230,17 +226,11 @@ class CalculatingStatistics:
         accuracy = (TP + TN) / total if total > 0 else 0.0
         precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
         recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
-        f_score = (
-            2 * precision * recall / (precision + recall)
-            if (precision + recall) > 0
-            else 0.0
-        )
+        f_score = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
-        edge_lengths = (
-            CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-                merge_df["ctrl_lat"].to_numpy(dtype=float),
-                merge_df["ctrl_lon"].to_numpy(dtype=float),
-            )
+        edge_lengths = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+            merge_df["ctrl_lat"].to_numpy(dtype=float),
+            merge_df["ctrl_lon"].to_numpy(dtype=float),
         )
 
         # Длинна считается если оба конца ребра принадлежат к одному ребру
@@ -301,9 +291,7 @@ class CalculatingStatistics:
         }
 
     @staticmethod
-    def _merge_dataframes(
-        experimental_df: pd.DataFrame, control_df: pd.DataFrame
-    ) -> pd.DataFrame:
+    def _merge_dataframes(experimental_df: pd.DataFrame, control_df: pd.DataFrame) -> pd.DataFrame:
         """
         Объединяет экспериментальный и контрольный DataFrame в один.
         Добавляет префиксы exp_ и ctrl_ ко всем колонкам.
@@ -316,9 +304,7 @@ class CalculatingStatistics:
             Объединенный DataFrame с префиксами для каждой колонки.
         """
         if len(experimental_df) != len(control_df):
-            raise ValueError(
-                f"Длинны DF не совпадают: {len(experimental_df)} != {len(control_df)}"
-            )
+            raise ValueError(f"Длинны DF не совпадают: {len(experimental_df)} != {len(control_df)}")
         # Список колонок для слияния (time нужна для _extend_intervals)
         cols_to_merge = ["lat", "lon", "validate_point", "time"]
 
@@ -341,9 +327,7 @@ class CalculatingStatistics:
         )
         ctrl_part["in_water"] = control_df["in_water"]
 
-        return pd.concat(
-            [exp_part.reset_index(drop=True), ctrl_part.reset_index(drop=True)], axis=1
-        )
+        return pd.concat([exp_part.reset_index(drop=True), ctrl_part.reset_index(drop=True)], axis=1)
 
 
 if __name__ == "__main__":
@@ -364,9 +348,7 @@ if __name__ == "__main__":
     # }
     # df_exp = pd.DataFrame(data_exp)
     list_time = []
-    path = (
-        Path(__file__).parent.parent.parent / "data" / "post_processing" / "example.csv"
-    )
+    path = Path(__file__).parent.parent.parent / "data" / "post_processing" / "example.csv"
     df_exp = pd.read_csv(path)
     df_control = pd.read_csv(path)
 

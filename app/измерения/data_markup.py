@@ -240,9 +240,7 @@ def main():
     # проверкой mask_has_coords при необходимости)
 
     mask_gj2 = mask_output & ~mask_valid_segments
-    df_gj2 = df[mask_gj2].dropna(
-        subset=["lat", "lon"]
-    )  # Убираем NaN, так как геометрия невозможна
+    df_gj2 = df[mask_gj2].dropna(subset=["lat", "lon"])  # Убираем NaN, так как геометрия невозможна
 
     if not df_gj2.empty:
         path_gj2 = Path(__file__).parent / "remainder_points.geojson"

@@ -9,9 +9,7 @@ from kalman_filter_cv import (convert_to_local_cartesian, get_lon_lat,
 random.seed(42)
 
 if __name__ == "__main__":
-    path = (
-        Path(__file__).parent.parent.parent / "data" / "post_processing" / "example.csv"
-    )
+    path = Path(__file__).parent.parent.parent / "data" / "post_processing" / "example.csv"
     df = load_csv(path)
     df = df[df["satellites"] >= 2]
     list_valid_df, list_invalid_df = parce_df(df)

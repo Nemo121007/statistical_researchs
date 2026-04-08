@@ -65,9 +65,7 @@ def main():
         lon2 = lon_rad
 
         # Удаляем первую строку, так как для нее нет предыдущей точки
-        calc_data = pd.DataFrame(
-            {"lat1": lat1[1:], "lon1": lon1[1:], "lat2": lat2[1:], "lon2": lon2[1:]}
-        ).dropna()
+        calc_data = pd.DataFrame({"lat1": lat1[1:], "lon1": lon1[1:], "lat2": lat2[1:], "lon2": lon2[1:]}).dropna()
 
         # Метод сферической теоремы косинусов
         start_time = time.perf_counter()
@@ -104,9 +102,7 @@ def main():
         temp_result["geopy_time_sec"] = time.perf_counter() - start_time
 
         # Geopy как эталон
-        comparison_df = pd.DataFrame(
-            {"haversine": dist_haversine, "cosine": dist_cosine, "geopy": dist_geopy}
-        )
+        comparison_df = pd.DataFrame({"haversine": dist_haversine, "cosine": dist_cosine, "geopy": dist_geopy})
 
         # Вычисляем и сохраняем суммарное расстояние для каждого метода
         total_haversine = np.sum(dist_haversine)
@@ -133,9 +129,7 @@ def main():
 
             # Максимальная переоценка (максимальная положительная ошибка)
             positive_errors = error[error > 0]
-            temp_result[f"{method}_max_overestimation_m"] = (
-                positive_errors.max() if not positive_errors.empty else 0.0
-            )
+            temp_result[f"{method}_max_overestimation_m"] = positive_errors.max() if not positive_errors.empty else 0.0
 
             # Максимальная недооценка (максимальная отрицательная ошибка по модулю)
             negative_errors = error[error < 0]
