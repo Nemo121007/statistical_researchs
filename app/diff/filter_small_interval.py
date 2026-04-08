@@ -84,7 +84,18 @@ def _get_sub_intervals(
     speed_threshold: float,
     max_points_in_interval: int,
 ) -> List[Tuple[int, int]]:
-    """Вспомогательный метод для разбиения трека на подинтервалы."""
+    """
+    Метод, выделяющий подинтервалы, удовлетворяющие условиям скорости и максимального количества точек
+    Args:
+        lat_finite: Массив широт (конечные значения, без NaN)
+        lon_finite: Массив долгот (конечные значения, без NaN)
+        time_finite: Массив временных меток (конечные значения, без NaN)
+        speed_threshold: Предельное значение скорости (м/с)
+        max_points_in_interval: Максимальное количество точек в одном интервале
+
+    Returns:
+        Список кортежей (start, end) для каждого выделенного подинтервала
+    """
     lat_rad = np.radians(lat_finite)
     lon_rad = np.radians(lon_finite)
 
@@ -116,7 +127,20 @@ def _apply_reachability_mask(
     time_finite: np.ndarray,
     speed_threshold: float,
 ) -> None:
-    """Применяет маску валидности на основе достижимости интервалов."""
+    """
+    Метод, применяющий маску валидности к точкам на основе достижимости по скорости между интервалами
+    Args:
+        sub_intervals: Список подинтервалов (start, end)
+        validate_mask: Массив флагов валидности (результат)
+        finite_idx: Индексы конечных значений (без NaN) в исходном массиве
+        lat_finite: Массив широт
+        lon_finite: Массив долгот
+        time_finite: Массив временных меток
+        speed_threshold: Предельно допустимая скорость для проверки достижимости
+
+    Returns:
+        None (маска validate_mask изменяется на месте)
+    """
     if not sub_intervals:
         return
 

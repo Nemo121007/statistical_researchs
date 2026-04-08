@@ -40,13 +40,12 @@ def _haversine_distance_m(
 
 def _segment_distances_m(lat_rad: np.ndarray, lon_rad: np.ndarray) -> np.ndarray:
     """
-
+    Метод, рассчитывающий расстояние между соседними точками
     Args:
-        lat_rad:
-        lon_rad:
-
+        lat_rad: массив широт (в радианах)
+        lon_rad: массив долгот (в радианах)
     Returns:
-
+        Массив расстояний между соседними точками (в метрах)
     """
     if len(lat_rad) < 2:
         return np.array([], dtype=float)
@@ -64,7 +63,15 @@ def _get_distance_intervals(
     lon_finite: np.ndarray,
     distance_threshold: float,
 ) -> list:
-    """Вспомогательный метод для получения интервалов по расстоянию."""
+    """
+    Метод, разделяющий последовательность точек на интервалы по заданному порогу расстояния
+    Args:
+        lat_finite: Массив широт (конечные значения, без NaN)
+        lon_finite: Массив долгот (конечные значения, без NaN)
+        distance_threshold: Максимально допустимое расстояние между соседними точками одного интервала
+    Returns:
+        Список кортежей (start, end) для каждого выделенного интервала
+    """
     lat_finite_rad = np.radians(lat_finite)
     lon_finite_rad = np.radians(lon_finite)
 
@@ -84,7 +91,20 @@ def _apply_speed_reachability_mask(
     time_finite: np.ndarray,
     speed_threshold: float,
 ) -> None:
-    """Вспомогательный метод для применения маски на основе достижимости."""
+    """
+    Метод, применяющий маску валидности к точкам на основе достижимости по скорости между интервалами
+    Args:
+        intervals: Список интервалов (start, end)
+        validate_mask: Массив флагов валидности (результат)
+        finite_idx: Индексы конечных значений (без NaN) в исходном массиве
+        lat_finite: Массив широт
+        lon_finite: Массив долгот
+        time_finite: Массив временных меток
+        speed_threshold: Предельно допустимая скорость для проверки достижимости
+
+    Returns:
+        None (маска validate_mask изменяется на месте)
+    """
     if not intervals:
         return
 
