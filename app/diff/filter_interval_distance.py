@@ -1,12 +1,12 @@
 import time
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
 import pandas as pd
-from black.cache import Path
 
-from app.help_scripts.IOPs_geojson import IOPs_geojson
 from app.help_scripts.calculating_statistics import CalculatingStatistics
+from app.help_scripts.IOPs_geojson import IOPs_geojson
 from app.working.data_processor import DataProcessor
 
 EARTH_RADIUS = 6_371_000.0  # метры
@@ -65,6 +65,57 @@ def _segment_distances_m(lat_rad: np.ndarray, lon_rad: np.ndarray) -> np.ndarray
     return EARTH_RADIUS * c
 
 
+def _get_distance_intervals(
+    lat_finite: np.ndarray,
+    lon_finite: np.ndarray,
+    distance_threshold: float,
+) -> list:
+    """Вспомогательный метод для получения интервалов по расстоянию."""
+    lat_finite_rad = np.radians(lat_finite)
+    lon_finite_rad = np.radians(lon_finite)
+
+    segment_distances = _segment_distances_m(lat_finite_rad, lon_finite_rad)
+    split_index = np.flatnonzero(segment_distances > distance_threshold) + 1
+
+    chunks = np.split(np.arange(len(lat_finite)), split_index)
+    return [(int(chunk[0]), int(chunk[-1])) for chunk in chunks if chunk.size > 0]
+
+
+def _apply_speed_reachability_mask(
+    intervals: list,
+    validate_mask: np.ndarray,
+    finite_idx: np.ndarray,
+    lat_finite: np.ndarray,
+    lon_finite: np.ndarray,
+    time_finite: np.ndarray,
+    speed_threshold: float,
+) -> None:
+    """Вспомогательный метод для применения маски на основе достижимости."""
+    if not intervals:
+        return
+
+    first_start, first_end = intervals[0]
+    validate_mask[finite_idx[first_start : first_end + 1]] = 1
+    last_valid_end = first_end
+
+    for start, end in intervals[1:]:
+        dt = time_finite[start] - time_finite[last_valid_end]
+
+        if not np.isfinite(dt) or dt <= 0:
+            continue
+
+        bridge_dist = _haversine_distance_m(
+            np.radians(lat_finite[last_valid_end]),
+            np.radians(lon_finite[last_valid_end]),
+            np.radians(lat_finite[start]),
+            np.radians(lon_finite[start]),
+        )
+
+        if bridge_dist / dt < speed_threshold:
+            validate_mask[finite_idx[start : end + 1]] = 1
+            last_valid_end = end
+
+
 def filter_distance_intervals_and_speed(
     lon: np.ndarray,
     lat: np.ndarray,
@@ -99,9 +150,7 @@ def filter_distance_intervals_and_speed(
     lat_copy = np.asarray(lat, dtype=float).copy()
     time_copy = np.asarray(time, dtype=float).copy()
 
-    finite_mask = (
-        np.isfinite(lon_copy) & np.isfinite(lat_copy) & np.isfinite(time_copy)
-    )
+    finite_mask = np.isfinite(lon_copy) & np.isfinite(lat_copy) & np.isfinite(time_copy)
     finite_idx = np.flatnonzero(finite_mask)
 
     validate_mask = np.zeros(n, dtype=np.int8)
@@ -117,47 +166,17 @@ def filter_distance_intervals_and_speed(
     lat_finite = lat_copy[finite_mask]
     time_finite = time_copy[finite_mask]
 
-    lon_finite_rad = np.radians(lon_finite)
-    lat_finite_rad = np.radians(lat_finite)
+    intervals = _get_distance_intervals(lat_finite, lon_finite, distance_threshold)
 
-    # 1) Разбиение по расстоянию между соседними finite-точками
-    segment_distances = _segment_distances_m(lat_finite_rad, lon_finite_rad)
-    split_index = np.flatnonzero(segment_distances > distance_threshold) + 1
-
-    chunks = np.split(np.arange(finite_idx.size), split_index)
-    intervals = [
-        (int(chunk[0]), int(chunk[-1]))
-        for chunk in chunks
-        if chunk.size > 0
-    ]
-
-    if not intervals:
-        return lon_copy, lat_copy, time_copy, validate_mask
-
-    # 2) Первый интервал всегда считаем валидным
-    first_start, first_end = intervals[0]
-    validate_mask[finite_idx[first_start: first_end + 1]] = 1
-    last_valid_end = first_end
-
-    # 3) Проверка достижимости между интервалами по скорости
-    for start, end in intervals[1:]:
-        dt = time_finite[start] - time_finite[last_valid_end]
-
-        if not np.isfinite(dt) or dt <= 0:
-            continue
-
-        bridge_dist = _haversine_distance_m(
-            np.radians(lat_finite[last_valid_end]),
-            np.radians(lon_finite[last_valid_end]),
-            np.radians(lat_finite[start]),
-            np.radians(lon_finite[start]),
-        )
-
-        bridge_speed = bridge_dist / dt
-
-        if bridge_speed < speed_threshold:
-            validate_mask[finite_idx[start: end + 1]] = 1
-            last_valid_end = end
+    _apply_speed_reachability_mask(
+        intervals,
+        validate_mask,
+        finite_idx,
+        lat_finite,
+        lon_finite,
+        time_finite,
+        speed_threshold,
+    )
 
     return lon_copy, lat_copy, time_copy, validate_mask
 
@@ -174,12 +193,14 @@ if __name__ == "__main__":
         lon_df, lat_df, time_df = processor.get_lon_lat(df)
 
         start_time = time.time()
-        check_lon, check_lat, check_time, check_validate_point = filter_distance_intervals_and_speed(
-            lon_df,
-            lat_df,
-            time_df,
-            distance_threshold=500,
-            speed_threshold=20.0,
+        check_lon, check_lat, check_time, check_validate_point = (
+            filter_distance_intervals_and_speed(
+                lon_df,
+                lat_df,
+                time_df,
+                distance_threshold=500,
+                speed_threshold=20.0,
+            )
         )
         end_time = time.time()
         execution_time = end_time - start_time
@@ -221,17 +242,17 @@ if __name__ == "__main__":
             step = 100000
             path_dir = Path(__file__).parent.parent.parent
             for i in range(0, len(lon_df), step):
-                lon = lon_df[i: i + step]
-                lat = lat_df[i: i + step]
-                time = time_df[i: i + step]
+                lon = lon_df[i : i + step]
+                lat = lat_df[i : i + step]
+                time = time_df[i : i + step]
                 number = i // step
                 path = path_dir / f"control_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
 
             for i in range(0, len(lon_df), step):
-                lon = check_lon[i: i + step]
-                lat = check_lat[i: i + step]
-                time = check_time[i: i + step]
+                lon = check_lon[i : i + step]
+                lat = check_lat[i : i + step]
+                time = check_time[i : i + step]
                 number = i // step
                 path = path_dir / f"experiment_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])

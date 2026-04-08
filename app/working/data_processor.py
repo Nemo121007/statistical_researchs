@@ -5,9 +5,8 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from app.help_scripts.calculator_distances_length_large_circle import (
-    CalculatorDistancesLengthLargeCircle,
-)
+from app.help_scripts.calculator_distances_length_large_circle import \
+    CalculatorDistancesLengthLargeCircle
 
 
 class DataProcessor:

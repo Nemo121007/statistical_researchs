@@ -6,9 +6,8 @@ import numpy as np
 import pandas as pd
 
 from app.help_scripts.calculating_statistics import CalculatingStatistics
-from app.help_scripts.calculator_distances_length_large_circle import (
-    CalculatorDistancesLengthLargeCircle,
-)
+from app.help_scripts.calculator_distances_length_large_circle import \
+    CalculatorDistancesLengthLargeCircle
 from app.help_scripts.IOPs_geojson import IOPs_geojson
 from app.working.data_processor import DataProcessor
 
@@ -184,17 +183,17 @@ if __name__ == "__main__":
             step = 100000
             path_dir = Path(__file__).parent.parent.parent
             for i in range(0, len(lon_df), step):
-                lon = lon_df[i: i + step]
-                lat = lat_df[i: i + step]
-                time = time_df[i: i + step]
+                lon = lon_df[i : i + step]
+                lat = lat_df[i : i + step]
+                time = time_df[i : i + step]
                 number = i // step
                 path = path_dir / f"control_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
 
             for i in range(0, len(lon_df), step):
-                lon = check_lon[i: i + step]
-                lat = check_lat[i: i + step]
-                time = check_time[i: i + step]
+                lon = check_lon[i : i + step]
+                lat = check_lat[i : i + step]
+                time = check_time[i : i + step]
                 number = i // step
                 path = path_dir / f"experiment_{number}.geojson"
                 IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])

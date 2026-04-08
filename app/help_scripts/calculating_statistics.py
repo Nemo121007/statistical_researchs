@@ -5,9 +5,8 @@ from typing import Dict, Union
 import numpy as np
 import pandas as pd
 
-from app.help_scripts.calculator_distances_length_large_circle import (
-    CalculatorDistancesLengthLargeCircle,
-)
+from app.help_scripts.calculator_distances_length_large_circle import \
+    CalculatorDistancesLengthLargeCircle
 
 
 class CalculatingStatistics:
@@ -38,49 +37,49 @@ class CalculatingStatistics:
         lengths = CalculatingStatistics._get_statistic_abs_length(df)
 
         report_lines = [
-            "=" * 50,
-            "REPORT: Route Validation Statistics",
-            "=" * 50,
+            "=" * 55,
+            "REPORT: Route Validation Statistics".center(55),
+            "=" * 55,
             "\n[1] Point Metrics (Counts)",
-            f"  Count valid point in control_df:      {stat_point['count_valid_point_control_df']}",
-            f"  Count valid point in experimental_df: {stat_point['count_valid_point_experimental_df']}",
-            f"  Count valid point in merge_df:        {stat_point['count_valid_point_merge_df']}",
-            "-" * 50,
-            f"  True Positives (TP):  {stat_point['TP']}",
-            f"  False Positives (FP): {stat_point['FP']}",
-            f"  False Negatives (FN): {stat_point['FN']}",
-            f"  True Negatives (TN):  {stat_point['TN']}",
-            f"  In_water:             {stat_point['in_water']}",
-            "-" * 50,
-            f"  Accuracy:   {stat_point['accuracy']:.4f}",
-            f"  Precision:  {stat_point['precision']:.4f}",
-            f"  Recall:     {stat_point['recall']:.4f}",
-            f"  F1 Score:   {stat_point['f_score']:.4f}",
+            f"{'  Count valid point in control_df:':<40} {stat_point['count_valid_point_control_df']:>14}",
+            f"{'  Count valid point in experimental_df:':<40} {stat_point['count_valid_point_experimental_df']:>14}",
+            f"{'  Count valid point in merge_df:':<40} {stat_point['count_valid_point_merge_df']:>14}",
+            "-" * 55,
+            f"{'  True Positives (TP):':<40} {stat_point['TP']:>14}",
+            f"{'  False Positives (FP):':<40} {stat_point['FP']:>14}",
+            f"{'  False Negatives (FN):':<40} {stat_point['FN']:>14}",
+            f"{'  True Negatives (TN):':<40} {stat_point['TN']:>14}",
+            f"{'  In_water:':<40} {stat_point['in_water']:>14}",
+            "-" * 55,
+            f"{'  Accuracy:':<40} {stat_point['accuracy']:>14.4f}",
+            f"{'  Precision:':<40} {stat_point['precision']:>14.4f}",
+            f"{'  Recall:':<40} {stat_point['recall']:>14.4f}",
+            f"{'  F1 Score:':<40} {stat_point['f_score']:>14.4f}",
             "\n[2] Length Metrics (Meters)",
-            f"  Count valid edges in control_df:      {stat_edge['count_valid_edge_control_df']}",
-            f"  Count valid edges in experimental_df: {stat_edge['count_valid_edge_experimental_df']}",
-            f"  Count valid edges in merge_df:        {stat_edge['count_valid_edge_merge_df']}",
-            f"  Length valid edges in control_df:     {lengths['ctrl_distance']}",
-            f"  Length valid edges in experimental_df:{lengths['exp_distance']}",
-            "-" * 50,
-            f"  True Positives (TP):  {stat_edge['TP']}",
-            f"  False Positives (FP): {stat_edge['FP']}",
-            f"  False Negatives (FN): {stat_edge['FN']}",
-            f"  True Negatives (TN):  {stat_edge['TN']}",
-            f"  In_water:             {stat_edge['in_water']}",
-            "-" * 50,
-            f"  Accuracy:   {stat_edge['accuracy']:.4f}",
-            f"  Precision:  {stat_edge['precision']:.4f}",
-            f"  Recall:     {stat_edge['recall']:.4f}",
-            f"  F1 Score:   {stat_edge['f_score']:.4f}",
-            "-" * 50,
-            f"  Length True Positives (TP):  {stat_edge['length_TP']:.4f}",
-            f"  Length False Positives (FP): {stat_edge['length_FP']:.4f}",
-            f"  Length False Negatives (FN): {stat_edge['length_FN']:.4f}",
-            f"  Length True Negatives (TN):  {stat_edge['length_TN']:.4f}",
-            "-" * 50,
-            f"  Avg time working:   {np.average(time_working[5:]):.4f}",
-            "=" * 50,
+            f"{'  Count valid edges in control_df:':<40} {stat_edge['count_valid_edge_control_df']:>14}",
+            f"{'  Count valid edges in experimental_df:':<40} {stat_edge['count_valid_edge_experimental_df']:>14}",
+            f"{'  Count valid edges in merge_df:':<40} {stat_edge['count_valid_edge_merge_df']:>14}",
+            f"{'  Length valid edges in control_df:':<40} {lengths['ctrl_distance']:>14.4f}",
+            f"{'  Length valid edges in experimental_df:':<40} {lengths['exp_distance']:>14.4f}",
+            "-" * 55,
+            f"{'  True Positives (TP):':<40} {stat_edge['TP']:>14}",
+            f"{'  False Positives (FP):':<40} {stat_edge['FP']:>14}",
+            f"{'  False Negatives (FN):':<40} {stat_edge['FN']:>14}",
+            f"{'  True Negatives (TN):':<40} {stat_edge['TN']:>14}",
+            f"{'  In_water:':<40} {stat_edge['in_water']:>14}",
+            "-" * 55,
+            f"{'  Accuracy:':<40} {stat_edge['accuracy']:>14.4f}",
+            f"{'  Precision:':<40} {stat_edge['precision']:>14.4f}",
+            f"{'  Recall:':<40} {stat_edge['recall']:>14.4f}",
+            f"{'  F1 Score:':<40} {stat_edge['f_score']:>14.4f}",
+            "-" * 55,
+            f"{'  Length True Positives (TP):':<40} {stat_edge['length_TP']:>14.4f}",
+            f"{'  Length False Positives (FP):':<40} {stat_edge['length_FP']:>14.4f}",
+            f"{'  Length False Negatives (FN):':<40} {stat_edge['length_FN']:>14.4f}",
+            f"{'  Length True Negatives (TN):':<40} {stat_edge['length_TN']:>14.4f}",
+            "-" * 55,
+            f"{'  Avg time working:':<40} {np.average(time_working[5:]):>14.4f}",
+            "=" * 55,
         ]
 
         full_report = "\n".join(report_lines)
@@ -274,22 +273,28 @@ class CalculatingStatistics:
         mask = merge_df["ctrl_validate_point"] == 1
         ctrl_lat = (merge_df.loc[mask, "ctrl_lat"]).to_numpy(dtype=float)
         ctrl_lon = (merge_df.loc[mask, "ctrl_lon"]).to_numpy(dtype=float)
-        ctrl_distance = np.nansum(
-            CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-                ctrl_lat,
-                ctrl_lon,
+        if np.nansum(mask) >= 2:
+            ctrl_distance = np.nansum(
+                CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+                    ctrl_lat,
+                    ctrl_lon,
+                )
             )
-        )
+        else:
+            ctrl_distance = np.nan
 
         mask = merge_df["exp_validate_point"] == 1
         exp_lat = (merge_df.loc[mask, "exp_lat"]).to_numpy(dtype=float)
         exp_lon = (merge_df.loc[mask, "exp_lon"]).to_numpy(dtype=float)
-        exp_distance = np.nansum(
-            CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-                exp_lat,
-                exp_lon,
+        if np.nansum(mask) >= 2:
+            exp_distance = np.nansum(
+                CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+                    exp_lat,
+                    exp_lon,
+                )
             )
-        )
+        else:
+            exp_distance = np.nan
         return {
             "ctrl_distance": ctrl_distance,
             "exp_distance": exp_distance,
