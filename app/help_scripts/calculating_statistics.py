@@ -331,22 +331,6 @@ class CalculatingStatistics:
 
 
 if __name__ == "__main__":
-    # # Пример использования
-    # data = {
-    #     'lat': [55.75, 55.76, 55.77, 55.78, 55.79],
-    #     'lon': [37.60, 37.61, 37.62, 37.63, 37.64],
-    #     'time': [1, 2, 3, 20, 21],
-    #     'validate_point': [1, 1, 1, 1, 1]
-    # }
-    # df_control = pd.DataFrame(data)
-    #
-    # data_exp = {
-    #     'lat': [55.75, 55.76, 55.77, 55.78, 55.79],
-    #     'lon': [37.60, 37.61, 37.62, 37.63, 37.64],
-    #     'time': [1, 2, 3, 20, 21],
-    #     'validate_point': [1, 1, 0, 1, 0]
-    # }
-    # df_exp = pd.DataFrame(data_exp)
     list_time = []
     path = Path(__file__).parent.parent.parent / "data" / "post_processing" / "example.csv"
     df_exp = pd.read_csv(path)

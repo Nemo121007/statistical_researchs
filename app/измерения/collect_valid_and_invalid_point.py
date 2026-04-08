@@ -55,7 +55,7 @@ if __name__ == "__main__":
 
     lon, lat, time = processor.get_lon_lat(df)
 
-    path = project_root / "invalid_interval.geojson"
+    path = project_root / "valid_interval.geojson"
     IOPs_geojson.write_geojson_from_arrays(path, [[time, lat, lon]])
 
     x, y = processor.convert_to_local_cartesian(lon, lat)
@@ -68,11 +68,6 @@ if __name__ == "__main__":
     DataProcessor.plot_array_and_hist(likelihood, bins=100, save_path=path_true)
     print("false_RW.png")
 
-    # path_false = project_root / 'false_RW.png'
-    # _, _, likelihood = kf.filter(x, y, time)
-    # likelihood = likelihood.tolist()
-    # DataProcessor.plot_array_and_hist(likelihood, bins=100, save_path=path_false)
-
     kf = KalmanFilterCV(sigma_acc=0.0001 * 0.04, sigma_meas=1 * 2.4)
 
     path_true = project_root / "false_CV_13.png"
@@ -81,8 +76,3 @@ if __name__ == "__main__":
     DataProcessor.plot_array_and_hist(likelihood, bins=100, save_path=path_true)
     print("false_CV.png")
 
-    # path_false = project_root / 'false_CV.png'
-    # _, _, likelihood = kf.filter(x, y, time)
-    # likelihood = likelihood.tolist()
-    # DataProcessor.plot_array_and_hist(likelihood, bins=100, save_path=path_true)
-    # print('false_CV.png')
