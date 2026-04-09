@@ -75,4 +75,3 @@ if __name__ == "__main__":
     likelihood = likelihood.tolist()
     DataProcessor.plot_array_and_hist(likelihood, bins=100, save_path=path_true)
     print("false_CV.png")
-

@@ -3,8 +3,7 @@ from math import sqrt
 from pathlib import Path
 
 import numpy as np
-from kalman_filter_cv import (convert_to_local_cartesian, get_lon_lat,
-                              load_csv, parce_df)
+from kalman_filter_cv import convert_to_local_cartesian, get_lon_lat, load_csv, parce_df
 
 random.seed(42)
 

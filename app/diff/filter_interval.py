@@ -6,8 +6,7 @@ import numpy as np
 import pandas as pd
 
 from app.help_scripts.calculating_statistics import CalculatingStatistics
-from app.help_scripts.calculator_distances_length_large_circle import \
-    CalculatorDistancesLengthLargeCircle
+from app.help_scripts.calculator_distances_length_large_circle import CalculatorDistancesLengthLargeCircle
 from app.help_scripts.IOPs_geojson import IOPs_geojson
 from app.working.data_processor import DataProcessor
 
