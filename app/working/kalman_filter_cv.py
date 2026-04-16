@@ -53,12 +53,12 @@ class KalmanFilterCV:
         x: np.ndarray,
         y: np.ndarray,
         time: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Применяет фильтр Калмана и вычисляет логарифм правдоподобия.
         """
         if len(x) < 2:
-            return x, y, np.array([])
+            return x, y, np.array([]), np.array([])
 
         H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
 
@@ -78,7 +78,8 @@ class KalmanFilterCV:
         I = np.eye(4)
 
         # Переменная для накопления правдоподобия
-        likelihood = np.zeros(len(x))
+        log_likelihood = np.full(len(x), np.nan)
+        mahalanobis_sq = np.full(len(x), np.nan)
 
         # Константа для формулы (2 * pi)
         log_2pi = np.log(2 * np.pi)
@@ -110,8 +111,10 @@ class KalmanFilterCV:
             # Используем логарифм для численной устойчивости
             if det_S > 0:
                 S_inv = np.linalg.inv(S)
+                # Вычисление расстояния Мехаланобиса
                 mahalanobis_dist = (y_err.T @ S_inv @ y_err).item()
-                likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
+                log_likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
+                mahalanobis_sq[k] = mahalanobis_dist
             else:
                 # Защита: если матрица вырождена, используем псевдообратную матрицу
                 # для продолжения фильтрации, но правдоподобие не считаем
@@ -125,7 +128,7 @@ class KalmanFilterCV:
             filtered_x[k] = X_state[0, 0]
             filtered_y[k] = X_state[1, 0]
 
-        return filtered_x, filtered_y, likelihood
+        return filtered_x, filtered_y, log_likelihood, mahalanobis_sq
 
 
 if __name__ == "__main__":

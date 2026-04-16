@@ -189,42 +189,65 @@ class DataProcessor:
             DataProcessor.visualize_and_save(x, y, x_filt, y_filt, save_path)
 
     @staticmethod
-    def plot_array_and_hist(arr, bins=100, save_path: Path = None):
-        """Метод, визуализирующий массив в виде графика и гистограммы
+    def plot_array_and_hist(arr1, arr2=None, name="", bins=100, save_path: Path = None):
+        """Метод, визуализирующий массивы в виде графиков и гистограмм (2x2).
+        
         Args:
-            arr: массив значений
+            arr1: первый массив значений
+            arr2: второй массив значений (опционально)
+            name: название графика
             bins: количество интервалов для гистограммы
             save_path: путь для сохранения визуализации
         """
-        arr_np = np.asarray(arr).flatten()
-        clean_arr = arr_np[~np.isnan(arr_np)]
+        arr1_np = np.asarray(arr1).flatten()
+        clean_arr1 = arr1_np[~np.isnan(arr1_np)]
 
-        if len(clean_arr) == 0:
-            print("Предупреждение: массив пуст или содержит только NaN. График не строится.")
+        clean_arr2 = np.array([])
+        if arr2 is not None:
+            arr2_np = np.asarray(arr2).flatten()
+            clean_arr2 = arr2_np[~np.isnan(arr2_np)]
+
+        if len(clean_arr1) == 0 and len(clean_arr2) == 0:
+            print("Предупреждение: оба массива пусты или содержат только NaN. Графики не строятся.")
             return
 
         # --- СОЗДАНИЕ ГРАФИКОВ ---
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        fig, axs = plt.subplots(2, 2, figsize=(14, 10))
         fig.suptitle(
-            f'График и гистограмма для {save_path.name if save_path else "данных"}\n'
-            f"Количество численных измерений: {len(clean_arr)}\n"
-            f"Количество элементов на вход: {len(arr)}",
+            f'Графики и гистограммы \n {name}\n'
+            f"Численных измерений: log_likehood ({len(clean_arr1)}), mahalanobis_sq ({len(clean_arr2)})",
             fontsize=14,
         )
 
-        # --- Первый сабплот: Линейный график (из скорректированных данных) ---
-        ax1.plot(clean_arr, linewidth=1.5)
-        ax1.set_title("Линейный график (скорректированный)")
-        ax1.set_xlabel("Индекс")
-        ax1.set_ylabel("Значение")
-        ax1.grid(True)
+        # --- Верхний левый: Линейный график первого массива ---
+        if len(clean_arr1) > 0:
+            axs[0, 0].plot(clean_arr1, linewidth=1.5, color='blue')
+            axs[0, 0].set_title("Линейный график (log_likehood)")
+            axs[0, 0].set_xlabel("Индекс")
+            axs[0, 0].set_ylabel("Значение")
+            axs[0, 0].grid(True)
 
-        # --- Второй сабплот: Гистограмма частот (из скорректированных данных) ---
-        ax2.hist(clean_arr, bins=bins, edgecolor="black", alpha=0.7)
-        ax2.set_title(f"Гистограмма частот RW (интервалы: {bins})", fontsize=10)
-        ax2.set_xlabel("Значение")
-        ax2.set_ylabel("Частота")
-        ax2.grid(True, linestyle="--", alpha=0.6, axis="y")
+            # --- Верхний правый: Гистограмма первого массива ---
+            axs[0, 1].hist(clean_arr1, bins=bins, edgecolor="black", alpha=0.7, color='blue')
+            axs[0, 1].set_title(f"Гистограмма частот (log_likehood, интервалы: {bins})", fontsize=10)
+            axs[0, 1].set_xlabel("Значение")
+            axs[0, 1].set_ylabel("Частота")
+            axs[0, 1].grid(True, linestyle="--", alpha=0.6, axis="y")
+
+        # --- Нижний левый: Линейный график второго массива ---
+        if len(clean_arr2) > 0:
+            axs[1, 0].plot(clean_arr2, linewidth=1.5, color='green')
+            axs[1, 0].set_title("Линейный график (mahalanobis_sq)")
+            axs[1, 0].set_xlabel("Индекс")
+            axs[1, 0].set_ylabel("Значение")
+            axs[1, 0].grid(True)
+
+            # --- Нижний правый: Гистограмма второго массива ---
+            axs[1, 1].hist(clean_arr2, bins=bins, edgecolor="black", alpha=0.7, color='green')
+            axs[1, 1].set_title(f"Гистограмма частот (mahalanobis_sq, интервалы: {bins})", fontsize=10)
+            axs[1, 1].set_xlabel("Значение")
+            axs[1, 1].set_ylabel("Частота")
+            axs[1, 1].grid(True, linestyle="--", alpha=0.6, axis="y")
 
         plt.tight_layout()
 

@@ -49,9 +49,10 @@ if __name__ == "__main__":
         1115,
         3279,
     )
-    index = 3279
+    index = 379
+    name = "true 1"
 
-    df = list_invalid_df[index]
+    df = list_valid_df[index]
 
     lon, lat, time = processor.get_lon_lat(df)
 
@@ -62,16 +63,16 @@ if __name__ == "__main__":
 
     kf = KalmanFilterRW(sigma_acc=0.0001 * 0.04, sigma_meas=1 * 2.4)
 
-    path_true = project_root / "false_RW_13.png"
-    _, _, likelihood = kf.filter(x, y, time)
+    path_true = project_root / f"{name}_RW.png"
+    _, _, likelihood, mahalanobis_sq = kf.filter(x, y, time)
     likelihood = likelihood.tolist()
-    DataProcessor.plot_array_and_hist(likelihood, bins=100, save_path=path_true)
+    DataProcessor.plot_array_and_hist(likelihood, mahalanobis_sq, name=f"{name}_RW", bins=100, save_path=path_true)
     print("false_RW.png")
 
     kf = KalmanFilterCV(sigma_acc=0.0001 * 0.04, sigma_meas=1 * 2.4)
 
-    path_true = project_root / "false_CV_13.png"
-    _, _, likelihood = kf.filter(x, y, time)
+    path_true = project_root / f"{name}_CV.png"
+    _, _, likelihood, mahalanobis_sq = kf.filter(x, y, time)
     likelihood = likelihood.tolist()
-    DataProcessor.plot_array_and_hist(likelihood, bins=100, save_path=path_true)
+    DataProcessor.plot_array_and_hist(likelihood, mahalanobis_sq, name=f"{name}_CV", bins=100, save_path=path_true)
     print("false_CV.png")

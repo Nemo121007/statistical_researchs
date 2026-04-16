@@ -20,7 +20,9 @@ class KalmanFilterRW:
         self.sigma_acc = sigma_acc
         self.sigma_meas = sigma_meas
 
-    def filter(self, x: np.ndarray, y: np.ndarray, time: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def filter(
+            self, x: np.ndarray, y: np.ndarray, time: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         # pylint: disable=too-many-locals
         """
         Применяет фильтр Калмана к траектории и вычисляет логарифм правдоподобия.
@@ -37,7 +39,7 @@ class KalmanFilterRW:
             - Массив логарифмов правдоподобия (log-likelihood).
         """
         if len(x) < 2:
-            return x, y, np.array([])
+            return x, y, np.array([]), np.array([])
 
         n_dim = 2
 
@@ -65,7 +67,9 @@ class KalmanFilterRW:
         I = np.eye(n_dim)
 
         # Переменная для накопления правдоподобия
-        likelihood = np.zeros(len(x))
+        log_likelihood = np.full(len(x), np.nan)
+        mahalanobis_sq = np.full(len(x), np.nan)
+
         log_2pi = np.log(2 * np.pi)
         dim = 2  # Размерность измерения
 
@@ -96,7 +100,8 @@ class KalmanFilterRW:
             if det_S > 0:
                 S_inv = np.linalg.inv(S)
                 mahalanobis_dist = (y_err.T @ S_inv @ y_err).item()
-                likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
+                log_likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
+                mahalanobis_sq[k] = mahalanobis_dist
             else:
                 # Защита: если матрица вырождена, используем псевдообратную матрицу
                 # для продолжения фильтрации, но правдоподобие не считаем
@@ -114,7 +119,7 @@ class KalmanFilterRW:
             filtered_x[k] = X_state[0, 0]
             filtered_y[k] = X_state[1, 0]
 
-        return filtered_x, filtered_y, likelihood
+        return filtered_x, filtered_y, log_likelihood, mahalanobis_sq
 
 
 if __name__ == "__main__":
