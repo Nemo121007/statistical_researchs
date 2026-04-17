@@ -41,18 +41,18 @@ if __name__ == "__main__":
         2521,
         3260,
         3231,
-        1051,
-        2083,
-        1798,
-        1289,
-        1720,
-        1115,
-        3279,
+        1051,   # 7
+        2083,   # 8
+        1798,   # 9
+        1289,   # 10
+        1720,   # 11
+        1115,   # 12
+        3279,   # 13
     )
-    index = 379
-    name = "true 1"
+    index = 1474
+    name = "false 3"
 
-    df = list_valid_df[index]
+    df = list_invalid_df[index]
 
     lon, lat, time = processor.get_lon_lat(df)
 
