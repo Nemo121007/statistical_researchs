@@ -111,7 +111,7 @@ class KalmanFilterCV:
             # Используем логарифм для численной устойчивости
             if det_S > 0:
                 S_inv = np.linalg.inv(S)
-                # Вычисление расстояния Мехаланобиса
+                # Вычисление расстояния Махаланобиса
                 mahalanobis_dist = (y_err.T @ S_inv @ y_err).item()
                 log_likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
                 mahalanobis_sq[k] = mahalanobis_dist
