@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 import geojson
 import numpy as np
@@ -94,11 +94,11 @@ class IOPs_geojson:
     #         raise
 
     @staticmethod
-    def write_geojson_from_arrays(output_path: Path, list_arrays: List[List]) -> None:
+    def write_geojson_from_arrays(output_path: Path, list_arrays: List[Tuple[np.ndarray, np.ndarray, np.ndarray]]) -> None:
         """Записывает данные в GeoJSON файл из списков массивов времени(time), широты(lat) и долготы(lon).
         Args:
             output_path: Путь к выходному файлу.
-            list_arrays: Список списков массивов [время, широта, долгота].
+            list_arrays: Список списков массивов [time, lat, lon].
         Raises:
             ValueError: Если путь к файлу не задан или нет данных для записи.
             OSError: Если произошла ошибка при записи файла.
