@@ -76,7 +76,7 @@ class KalmanFilterRW:
         for k in range(1, len(time)):
             dt = time[k] - time[k - 1]
             if dt <= 0:
-                dt = 1e-5
+                dt = 0.0
 
             # --- Формирование матрицы шума процесса Q ---
             Q = np.eye(n_dim) * (self.sigma_acc**2 * dt)

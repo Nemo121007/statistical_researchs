@@ -89,21 +89,35 @@ class KalmanFilterCV:
             return x, y, np.array([]), np.array([])
 
         H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
-
         R = np.eye(2) * (self.sigma_meas**2)
+        I = np.eye(4)
 
-        X_state = np.array([x[0], y[0], 0.0, 0.0]).reshape(4, 1)
+        # Инициализация скорости
+        dt0 = time[1] - time[0]
+        vx0 = 0.0
+        vy0 = 0.0
+        # Защита от деления на ноль или отрицательного времени
+        if dt0 > 0:
+            vx0 = (x[1] - x[0]) / dt0
+            vy0 = (y[1] - y[0]) / dt0
+        X_state = np.array([x[0], y[0], vx0, vy0]).reshape(4, 1)
 
         P = np.eye(4) * 500.0
-        P[2, 2] = 100.0
-        P[3, 3] = 100.0
+        # Если время dt0 валидно, можно уменьшить неопределенность скорости
+        if dt0 > 0:
+            # Дисперсия скорости = 2 * дисперсия измерения / dt^2
+            # (по формуле распространения ошибки для разности двух точек)
+            vel_var = 2 * (self.sigma_meas**2) / (dt0**2)
+            P[2, 2] = vel_var
+            P[3, 3] = vel_var
+        else:
+            P[2, 2] = 100.0
+            P[3, 3] = 100.0
 
         filtered_x = np.zeros(len(x))
         filtered_y = np.zeros(len(y))
         filtered_x[0] = x[0]
         filtered_y[0] = y[0]
-
-        I = np.eye(4)
 
         # Переменная для накопления правдоподобия
         log_likelihood = np.full(len(x), np.nan)
@@ -116,7 +130,7 @@ class KalmanFilterCV:
         for k in range(1, len(time)):
             dt = time[k] - time[k - 1]
             if dt <= 0:
-                dt = 1e-5
+                dt = 0.0
 
             # --- Prediction ---
             F = self._get_transition_matrix(dt)
