@@ -21,7 +21,7 @@ def analyze_filter_consistency(
     Args:
         mahalanobis_sq: Массив квадратов расстояний Махаланобиса.
         alpha: Уровень значимости.
-        save_path: Путь типа pathlib.Path.
+        save_path: Путь pathlib.Path.
                    Если указан, сохраняет .png и .txt по этому пути.
                    Если None, выводит график на экран и текст в консоль.
     """
@@ -55,16 +55,16 @@ def analyze_filter_consistency(
 
     if practical_mean > theoretical_mean * 1.5:
         report_lines.append(">>> ВНИМАНИЕ: Практическое среднее значительно выше теоретического.")
-        report_lines.append("    Возможные причины: занижены шумы (sigma_acc/sigma_meas) или объект маневрирует.")
+        report_lines.append("    Возможные причины: занижены шумы (sigma_acc/sigma_meas) или аномальное измерение.")
     elif practical_mean < theoretical_mean * 0.5:
         report_lines.append(">>> ВНИМАНИЕ: Практическое среднее значительно ниже теоретического.")
-        report_lines.append("    Возможные причины: завышены шумы (фильтр 'тупит').")
+        report_lines.append("    Возможные причины: завышены шумы (фильтр не реагирует на данные).")
     else:
         report_lines.append(">>> Статистика соответствует теории.")
 
     report_lines.append(f"\nТеоретический порог (Chi2): {threshold_chi2:.2f}")
     report_lines.append(f"Обнаружено выбросов: {outliers_count} ({practical_outlier_rate*100:.2f}%)")
-    report_lines.append(f"Ожидаемый % выбросов (Alpha): {alpha*100:.2f}%")
+    report_lines.append(f"Ожидаемая доля выбросов (Alpha): {alpha:.2f}%")
 
     report_text = "\n".join(report_lines)
 
@@ -76,12 +76,12 @@ def analyze_filter_consistency(
     if viz_limit < 10: viz_limit = 10
 
     axs[0].hist(
-        valid_data, bins=50, range=(0, viz_limit), density=True, alpha=0.6, color='g', label='Практика (Гистограмма)'
+        valid_data, bins=50, range=(0, viz_limit), density=True, alpha=0.6, color='g', label='Практические измерения (Гистограмма)'
     )
 
     x_range = np.linspace(0, viz_limit, 100)
     theoretical_pdf = chi2.pdf(x_range, df=2)
-    axs[0].plot(x_range, theoretical_pdf, 'r-', lw=2, label=r'Теория $\chi^2(2)$')
+    axs[0].plot(x_range, theoretical_pdf, 'r-', lw=2, label=r'Теоретическая функция $\chi^2(2)$')
 
     axs[0].axvline(
         threshold_chi2, color='b', linestyle='--', label=r'Порог $\alpha={}$ ({:.2f})'.format(alpha, threshold_chi2)
@@ -97,7 +97,7 @@ def analyze_filter_consistency(
     axs[1].semilogy(p_values, 'g.', markersize=2, label='P-value измерений')
     axs[1].axhline(alpha, color='r', linestyle='--', label=r'Уровень значимости $\alpha={}$'.format(alpha))
 
-    axs[1].fill_between(range(len(p_values)), 0, alpha, color='red', alpha=0.1, label='Зона тревоги')
+    axs[1].fill_between(range(len(p_values)), 0, alpha, color='red', alpha=0.1, label='Аномальная зона')
 
     axs[1].set_title('P-value измерений во времени')
     axs[1].set_xlabel('Индекс измерения')
@@ -155,8 +155,8 @@ if __name__ == "__main__":
     # stop_i = 151893
 
     # Смешанный участок 2
-    # start_i = 132860
-    # stop_i = 134000
+    start_i = 132860
+    stop_i = 134000
 
     # Эталонный участок 1
     # start_i = 142507
@@ -166,13 +166,13 @@ if __name__ == "__main__":
     # start_i = 134000
     # stop_i = 140659
 
-    # Шумовой участок 1
+    # Аномальный участок 1
     # start_i = 132910
     # stop_i = 132981
 
-    # Шумовой участок 2
-    start_i = 141609
-    stop_i = 142498
+    # Аномальный участок 2
+    # start_i = 141609
+    # stop_i = 142498
 
     test_df = df[start_i:stop_i]
     lon, lat, dt = processor.get_lon_lat(test_df)
@@ -221,7 +221,7 @@ if __name__ == "__main__":
         ]
     )
 
-    pict_path = project_root / 'anomaly_1.png'
+    pict_path = project_root / 'mixed_2.png'
     if len(all_mahalanobis_sq) > 0:
         analyze_filter_consistency(np.array(all_mahalanobis_sq), alpha=0.05, save_path=pict_path)
     else:
