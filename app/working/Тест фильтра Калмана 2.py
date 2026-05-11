@@ -103,6 +103,42 @@ def analyze_filter_consistency(
         ax_hist_true.set_title("Плотность распределения Mahalanobis (True) - Нет данных")
     ax_hist_true.grid(True)
 
+    # Четвертый график: плотность распределения likelihood False
+    fig_hist_lh_false, ax_hist_lh_false = plt.subplots(figsize=(8, 6))
+    data_hist_lh_false = list_likelihood[idx_false_lh]
+    if len(data_hist_lh_false) > 0:
+        p95_lh_false = np.percentile(data_hist_lh_false, 95)
+        data_hist_lh_false = data_hist_lh_false[data_hist_lh_false <= p95_lh_false]
+
+        mean_lh_false = np.mean(data_hist_lh_false)
+        var_lh_false = np.var(data_hist_lh_false)
+        std_lh_false = np.std(data_hist_lh_false)
+        if std_lh_false > 0:
+            data_hist_lh_false = (data_hist_lh_false - mean_lh_false) / std_lh_false
+        ax_hist_lh_false.hist(data_hist_lh_false, bins=50, density=True, alpha=0.6, color='b')
+        ax_hist_lh_false.set_title(f"Плотность распределения нормализованного Likelihood (False, без выбросов)\nИсходное Мат.ожидание: {mean_lh_false:.4f}, Дисперсия: {var_lh_false:.4f}")
+    else:
+        ax_hist_lh_false.set_title("Плотность распределения Likelihood (False) - Нет данных")
+    ax_hist_lh_false.grid(True)
+
+    # Пятый график: плотность распределения likelihood True
+    fig_hist_lh_true, ax_hist_lh_true = plt.subplots(figsize=(8, 6))
+    data_hist_lh_true = list_likelihood[idx_true_lh]
+    if len(data_hist_lh_true) > 0:
+        p95_lh_true = np.percentile(data_hist_lh_true, 95)
+        data_hist_lh_true = data_hist_lh_true[data_hist_lh_true <= p95_lh_true]
+
+        mean_lh_true = np.mean(data_hist_lh_true)
+        var_lh_true = np.var(data_hist_lh_true)
+        std_lh_true = np.std(data_hist_lh_true)
+        if std_lh_true > 0:
+            data_hist_lh_true = (data_hist_lh_true - mean_lh_true) / std_lh_true
+        ax_hist_lh_true.hist(data_hist_lh_true, bins=50, density=True, alpha=0.6, color='g')
+        ax_hist_lh_true.set_title(f"Плотность распределения нормализованного Likelihood (True, без выбросов)\nИсходное Мат.ожидание: {mean_lh_true:.4f}, Дисперсия: {var_lh_true:.4f}")
+    else:
+        ax_hist_lh_true.set_title("Плотность распределения Likelihood (True) - Нет данных")
+    ax_hist_lh_true.grid(True)
+
     if save_path:
         # Приводим путь к объекту Path
         if not isinstance(save_path, Path):
@@ -122,6 +158,10 @@ def analyze_filter_consistency(
         plt.close(fig_hist_false)
         fig_hist_true.savefig(save_path.parent / f"{save_path.stem}_hist_true.png", dpi=150)
         plt.close(fig_hist_true)
+        fig_hist_lh_false.savefig(save_path.parent / f"{save_path.stem}_lh_hist_false.png", dpi=150)
+        plt.close(fig_hist_lh_false)
+        fig_hist_lh_true.savefig(save_path.parent / f"{save_path.stem}_lh_hist_true.png", dpi=150)
+        plt.close(fig_hist_lh_true)
 
         print(f"Результаты сохранены:\n  График: {png_path}")
     else:
