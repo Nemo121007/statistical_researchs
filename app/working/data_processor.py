@@ -1,9 +1,11 @@
+import logging
 from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from pandas import DataFrame
 
 from app.help_scripts.calculator_distances_length_large_circle import CalculatorDistancesLengthLargeCircle
 
@@ -18,60 +20,221 @@ class DataProcessor:
         """Загружает данные из CSV файла."""
         return pd.read_csv(path)
 
-    def parse_intervals(
-        self, df: pd.DataFrame, n: int = 300, distance_threshold: float = 500
-    ) -> Tuple[List[pd.DataFrame], List[pd.DataFrame]]:
+    @staticmethod
+    def pre_filter(df: DataFrame) -> DataFrame:
         """
-        Разбивает DataFrame на списки валидных и невалидных интервалов.
+        Предварительная фильтрация данных:
+        - Удаляет точки с sat < 3.
+        - Удаляет точки с is_water == False.
+        - Удаляет точки с NULL/NaN в lon или lat.
         """
-        list_valid_df = self._extend_intervals(df, target_point=1, n=n, distance_threshold=distance_threshold)
-        list_invalid_df = self._extend_intervals(df, target_point=-1, n=n, distance_threshold=distance_threshold)
-        return list_valid_df, list_invalid_df
+        mask = df[["lon", "lat"]].isna().any(axis=1).sum()
+        logging.debug(
+            "Удалено %d точек с NULL/NaN в lon/lat",
+            mask,
+        )
+        df = df.dropna(subset=["lon", "lat"])
 
-    def _extend_intervals(
-        self,
+        mask = df["sat"] >= 3
+        logging.debug(
+            "Удалено %d точек с sat < 3",
+            (~mask).sum(),
+        )
+        df = df[mask]
+
+        mask = df["is_water"]
+        logging.debug(
+            "Удалено %d точек с is_water == False",
+            (~mask).sum(),
+        )
+        df = df[mask]
+        return df
+
+    @staticmethod
+    def parse_intervals(
         df: pd.DataFrame,
-        target_point: int = 1,
-        n: int = 300,
+        max_point_in_interval: int = 300,
+        min_point_in_interval: int = 10,
         distance_threshold: float = 500,
+    ) -> Tuple[
+        List[pd.DataFrame],
+        List[pd.DataFrame],
+        List[pd.DataFrame],
+    ]:
+        """
+
+        Args:
+            df:
+            max_point_in_interval:
+            min_point_in_interval:
+            distance_threshold:
+
+        Returns:
+
+        """
+
+        if df.empty:
+            return [], [], []
+
+        if max_point_in_interval < 1:
+            raise ValueError("max_point_in_interval должен быть >= 1.")
+
+        if distance_threshold <= 0:
+            raise ValueError("distance_threshold должен быть > 0.")
+
+        list_anomaly_df = DataProcessor._extend_intervals(
+            df=df,
+            target_status="anomaly",
+            max_point_in_interval=max_point_in_interval,
+            min_point_in_interval=min_point_in_interval,
+            distance_threshold=distance_threshold,
+        )
+
+        list_stand_df = DataProcessor._extend_intervals(
+            df=df,
+            target_status="stand",
+            max_point_in_interval=max_point_in_interval,
+            min_point_in_interval=min_point_in_interval,
+            distance_threshold=distance_threshold,
+        )
+
+        list_move_df = DataProcessor._extend_intervals(
+            df=df,
+            target_status="move",
+            max_point_in_interval=max_point_in_interval,
+            min_point_in_interval=min_point_in_interval,
+            distance_threshold=distance_threshold,
+        )
+
+        return (
+            list_anomaly_df,
+            list_stand_df,
+            list_move_df,
+        )
+
+    @staticmethod
+    def _extend_intervals(
+        df: pd.DataFrame,
+        target_status: str,
+        max_point_in_interval: int,
+        min_point_in_interval: int,
+        distance_threshold: float,
     ) -> List[pd.DataFrame]:
         """
-        Внутренняя логика разбиения на интервалы с проверкой дистанции.
+        Формирует список подинтервалов для одного значения status.
+
+        Алгоритм:
+
+            1. Фильтрация по status.
+            2. Разбиение по временным разрывам > 10 секунд.
+            3. Интервалы менее 10 точек отбрасываются.
+            4. Разбиение каждого оставшегося временного интервала:
+               - максимум n точек;
+               - максимум distance_threshold метров.
+
+        Входной DataFrame предварительно очищен от строк
+        с отсутствующими координатами.
         """
+
         if df.empty:
             return []
 
-        clean_df = df[df["validate_point"] == target_point].copy()
+        if target_status not in {"anomaly", "stand", "move"}:
+            raise ValueError(f"Неизвестный target_status: {target_status!r}")
+
+        if max_point_in_interval < min_point_in_interval:
+            raise ValueError("max_point_in_interval должен быть >= min_point_in_interval.")
+
+        if distance_threshold <= 0:
+            raise ValueError("distance_threshold должен быть > 0.")
+
+        # Оставляем только точки требуемого типа.
+        clean_df = df.loc[df["status"] == target_status].copy()
+
         if clean_df.empty:
             return []
 
-        time_diff = clean_df["time"].diff()
-        split_mask = time_diff > 10
+        # Приводим время к datetime.
+        clean_df["_time"] = pd.to_datetime(clean_df["time"], errors="coerce")
+
+        # Вычисляем разрывы времени векторно.
+        time_diff = clean_df["_time"].diff()
+        split_mask = time_diff > pd.Timedelta(seconds=10)
+
+        # Индексы начала временных интервалов.
         group_ids = split_mask.cumsum()
 
-        result_list = []
+        result_list: List[pd.DataFrame] = []
 
-        for _, group in clean_df.groupby(group_ids):
-            if len(group) <= 1:
+        # Обрабатываем каждый независимый временной интервал.
+        for _, group in clean_df.groupby(group_ids, sort=False):
+            group = group.drop(columns="_time")
+            group_size = len(group)
+
+            # Интервалы менее 10 точек не учитываем.
+            if group_size < min_point_in_interval:
+                logging.debug("Интервал %s отброшен: %d точек (< %d)",
+                              target_status,
+                              group_size,
+                              min_point_in_interval
+                              )
                 continue
 
-            lons = group["lon"].to_numpy()
-            lats = group["lat"].to_numpy()
+            # Если интервал уже помещается в n точек,
+            # дальнейшее разбиение не требуется.
+            if group_size <= max_point_in_interval:
+                result_list.append(group)
+                continue
 
+            # Координаты всего интервала.
+            lons = group["lon"].to_numpy(dtype=float)
+            lats = group["lat"].to_numpy(dtype=float)
+
+            # Начало текущего подинтервала.
             chunk_start_idx = 0
-            for i in range(1, len(group)):
-                lon_ends = np.array([lons[chunk_start_idx], lons[i]])
-                lat_ends = np.array([lats[chunk_start_idx], lats[i]])
-                distance = float(
-                    np.nansum(CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat_ends, lon_ends))
+
+            while chunk_start_idx < group_size:
+                # Максимальный размер подинтервала по количеству точек.
+                chunk_end_idx = min(chunk_start_idx + max_point_in_interval, group_size)
+
+                # Если дошли до конца интервала, добавляем остаток.
+                if chunk_end_idx >= group_size:
+                    result_list.append(group.iloc[chunk_start_idx:chunk_end_idx])
+                    break
+
+                # Проверяем пространственное ограничение на длину.
+                start_lon = lons[chunk_start_idx]
+                start_lat = lats[chunk_start_idx]
+
+                candidate_lons = lons[chunk_start_idx + 1: chunk_end_idx]
+                candidate_lats = lats[chunk_start_idx + 1: chunk_end_idx]
+
+                # Формируем массивы стартовых координат.
+                start_lons = np.full(len(candidate_lons), start_lon, dtype=float)
+                start_lats = np.full(len(candidate_lats), start_lat, dtype=float)
+
+                distances = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
+                    np.column_stack((start_lats, candidate_lats)),
+                    np.column_stack((start_lons, candidate_lons)),
                 )
 
-                if (i - chunk_start_idx + 1) >= n or distance >= distance_threshold:
-                    result_list.append(group.iloc[chunk_start_idx : i + 1])
-                    chunk_start_idx = i + 1
+                # Ищем первую точку, на которой достигнут threshold.
+                threshold_positions = np.flatnonzero(distances >= distance_threshold)
 
-            if chunk_start_idx < len(group) - 1:
-                result_list.append(group.iloc[chunk_start_idx:])
+                if threshold_positions.size == 0:
+                    # Пространственный threshold не достигнут.
+                    # Берём максимум n точек.
+                    result_list.append(group.iloc[chunk_start_idx:chunk_end_idx])
+                    chunk_start_idx = chunk_end_idx
+
+                else:
+                    # Первая точка, достигшая spatial threshold.
+                    split_position = int(threshold_positions[0])
+                    split_idx = chunk_start_idx + 1 + split_position
+
+                    result_list.append(group.iloc[chunk_start_idx: split_idx + 1])
+
+                    chunk_start_idx = split_idx + 1
 
         return result_list
 
@@ -80,6 +243,7 @@ class DataProcessor:
         """Извлекает массивы долгот, широт и времени"""
         return df["lon"].to_numpy(), df["lat"].to_numpy(), df["time"].to_numpy()
 
+    @staticmethod
     def convert_to_local_cartesian(self, lon: np.ndarray, lat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Переводит сферические координаты (lon, lat) в локальные прямоугольные (x, y) в метрах.
@@ -191,7 +355,7 @@ class DataProcessor:
     @staticmethod
     def plot_array_and_hist(arr1, arr2=None, name="", bins=100, save_path: Path = None):
         """Метод, визуализирующий массивы в виде графиков и гистограмм (2x2).
-        
+
         Args:
             arr1: первый массив значений
             arr2: второй массив значений (опционально)
@@ -214,21 +378,21 @@ class DataProcessor:
         # --- СОЗДАНИЕ ГРАФИКОВ ---
         fig, axs = plt.subplots(2, 2, figsize=(14, 10))
         fig.suptitle(
-            f'Графики и гистограммы \n {name}\n'
+            f"Графики и гистограммы \n {name}\n"
             f"Численных измерений: log_likehood ({len(clean_arr1)}), mahalanobis_sq ({len(clean_arr2)})",
             fontsize=14,
         )
 
         # --- Верхний левый: Линейный график первого массива ---
         if len(clean_arr1) > 0:
-            axs[0, 0].plot(clean_arr1, linewidth=1.5, color='blue')
+            axs[0, 0].plot(clean_arr1, linewidth=1.5, color="blue")
             axs[0, 0].set_title("Линейный график (log_likehood)")
             axs[0, 0].set_xlabel("Индекс")
             axs[0, 0].set_ylabel("Значение")
             axs[0, 0].grid(True)
 
             # --- Верхний правый: Гистограмма первого массива ---
-            axs[0, 1].hist(clean_arr1, bins=bins, edgecolor="black", alpha=0.7, color='blue')
+            axs[0, 1].hist(clean_arr1, bins=bins, edgecolor="black", alpha=0.7, color="blue")
             axs[0, 1].set_title(f"Гистограмма частот (log_likehood, интервалы: {bins})", fontsize=10)
             axs[0, 1].set_xlabel("Значение")
             axs[0, 1].set_ylabel("Частота")
@@ -236,14 +400,14 @@ class DataProcessor:
 
         # --- Нижний левый: Линейный график второго массива ---
         if len(clean_arr2) > 0:
-            axs[1, 0].plot(clean_arr2, linewidth=1.5, color='green')
+            axs[1, 0].plot(clean_arr2, linewidth=1.5, color="green")
             axs[1, 0].set_title("Линейный график (mahalanobis_sq)")
             axs[1, 0].set_xlabel("Индекс")
             axs[1, 0].set_ylabel("Значение")
             axs[1, 0].grid(True)
 
             # --- Нижний правый: Гистограмма второго массива ---
-            axs[1, 1].hist(clean_arr2, bins=bins, edgecolor="black", alpha=0.7, color='green')
+            axs[1, 1].hist(clean_arr2, bins=bins, edgecolor="black", alpha=0.7, color="green")
             axs[1, 1].set_title(f"Гистограмма частот (mahalanobis_sq, интервалы: {bins})", fontsize=10)
             axs[1, 1].set_xlabel("Значение")
             axs[1, 1].set_ylabel("Частота")
@@ -265,61 +429,14 @@ if __name__ == "__main__":
     from app.working.kalman_filter_cv import KalmanFilterCV
     from app.working.kalman_filter_rw import KalmanFilterRW
 
-    project_root = Path(__file__).parent.parent.parent
-    data_path = project_root / "data" / "post_processing" / "example.csv"
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
 
-    processor = DataProcessor()
-    kf = KalmanFilterCV(sigma_acc=0.0001 * 0.04, sigma_meas=1 * 2.4)
+    path = Path(__file__).parent.parent.parent / "data" / "1.csv"
+    df = DataProcessor.load_csv(path)
+    df = DataProcessor.pre_filter(df)
 
-    df = processor.load_csv(data_path)
-    df[["lon", "lat"]] = df[["lon", "lat"]].mask(df["satellites"] < 2, np.nan)
-
-    print(len(df[df["validate_point"] == 1]))
-    # Скобки обязательны! .notna() вместо != np.nan
-    print(len(df[(df["validate_point"] == -1) & df["lon"].notna() & df["lat"].notna()]))
-
-    chunk_size = 1000
-    res_likelihood = []
-
-    # Цикл разрезания изначального df на части по 1000 строк
-    for i in range(0, len(df), chunk_size):
-        # Берем сырой кусок
-        chunk = df.iloc[i : i + chunk_size].copy()
-
-        # Сбрасываем индексы, чтобы с нуля считать внутри куска (удобнее для срезов)
-        chunk = chunk.reset_index(drop=True)
-
-        # Ищем первый валидный индекс для lon и lat внутри ЭТОГО куска
-        first_valid_lon = chunk["lon"].first_valid_index()
-        first_valid_lat = chunk["lat"].first_valid_index()
-
-        # Если хотя бы одна из колонок полностью пустая в этом куске — пропускаем
-        if first_valid_lon is None or first_valid_lat is None:
-            continue
-
-        # Берем максимальный индекс (на случай если NaN в lon и lat начинаются не одновременно)
-        start_idx = max(first_valid_lon, first_valid_lat)
-
-        # Отрезаем "голову" с NaN
-        clean_chunk = chunk.loc[start_idx:]
-
-        # Если после отрезания осталось меньше 2 строк, фильтр не сработает
-        if len(clean_chunk) < 2:
-            continue
-
-        # Каст к x/y
-        lon, lat, time = processor.get_lon_lat(clean_chunk)
-        x, y = processor.convert_to_local_cartesian(lon, lat)
-
-        # Фильтр Калмана
-        _, _, likelihood = kf.filter(x, y, time)
-
-        # Сохраняем правдоподобие
-        res_likelihood.append(float(np.nansum(likelihood)))
-
-    save_path = project_root / "CV_100"
-    # Визуализация
-    if res_likelihood:
-        DataProcessor.plot_array_and_hist(res_likelihood, bins=100, save_path=None)
-    else:
-        print("Не собрано ни одного значения правдоподобия.")
+    list_anomaly_df, list_stand_df, list_move_df = DataProcessor.parse_intervals(df)
+    logging.debug(list_anomaly_df[-1])
