@@ -1,4 +1,6 @@
+import datetime
 import logging
+from datetime import timedelta
 from pathlib import Path
 from typing import List, Tuple
 
@@ -52,25 +54,29 @@ class DataProcessor:
 
     @staticmethod
     def parse_intervals(
-        df: pd.DataFrame,
-        max_point_in_interval: int = 300,
-        min_point_in_interval: int = 10,
-        distance_threshold: float = 500,
+            df: pd.DataFrame,
+            max_point_in_interval: int = 300,
+            min_point_in_interval: int = 10,
+            distance_threshold: float = 500,
     ) -> Tuple[
         List[pd.DataFrame],
         List[pd.DataFrame],
         List[pd.DataFrame],
     ]:
         """
+        Разбивает трек на интервалы типов anomaly, stand и move.
 
-        Args:
-            df:
-            max_point_in_interval:
-            min_point_in_interval:
-            distance_threshold:
+        Алгоритм:
 
-        Returns:
+        1. По изменению status формируются непрерывные участки.
+        2. Участки распределяются по типам:
+           anomaly / stand / move.
+        3. Каждый участок дополнительно разделяется:
+           - каждые max_point_in_interval точек;
+           - при расстоянии между соседними точками > distance_threshold.
+        4. Интервалы размером менее min_point_in_interval удаляются.
 
+        Все операции поиска границ выполняются векторно.
         """
 
         if df.empty:
@@ -79,68 +85,8 @@ class DataProcessor:
         if max_point_in_interval < 1:
             raise ValueError("max_point_in_interval должен быть >= 1.")
 
-        if distance_threshold <= 0:
-            raise ValueError("distance_threshold должен быть > 0.")
-
-        list_anomaly_df = DataProcessor._extend_intervals(
-            df=df,
-            target_status="anomaly",
-            max_point_in_interval=max_point_in_interval,
-            min_point_in_interval=min_point_in_interval,
-            distance_threshold=distance_threshold,
-        )
-
-        list_stand_df = DataProcessor._extend_intervals(
-            df=df,
-            target_status="stand",
-            max_point_in_interval=max_point_in_interval,
-            min_point_in_interval=min_point_in_interval,
-            distance_threshold=distance_threshold,
-        )
-
-        list_move_df = DataProcessor._extend_intervals(
-            df=df,
-            target_status="move",
-            max_point_in_interval=max_point_in_interval,
-            min_point_in_interval=min_point_in_interval,
-            distance_threshold=distance_threshold,
-        )
-
-        return (
-            list_anomaly_df,
-            list_stand_df,
-            list_move_df,
-        )
-
-    @staticmethod
-    def _extend_intervals(
-        df: pd.DataFrame,
-        target_status: str,
-        max_point_in_interval: int,
-        min_point_in_interval: int,
-        distance_threshold: float,
-    ) -> List[pd.DataFrame]:
-        """
-        Формирует список подинтервалов для одного значения status.
-
-        Алгоритм:
-
-            1. Фильтрация по status.
-            2. Разбиение по временным разрывам > 10 секунд.
-            3. Интервалы менее 10 точек отбрасываются.
-            4. Разбиение каждого оставшегося временного интервала:
-               - максимум n точек;
-               - максимум distance_threshold метров.
-
-        Входной DataFrame предварительно очищен от строк
-        с отсутствующими координатами.
-        """
-
-        if df.empty:
-            return []
-
-        if target_status not in {"anomaly", "stand", "move"}:
-            raise ValueError(f"Неизвестный target_status: {target_status!r}")
+        if min_point_in_interval < 1:
+            raise ValueError("min_point_in_interval должен быть >= 1.")
 
         if max_point_in_interval < min_point_in_interval:
             raise ValueError("max_point_in_interval должен быть >= min_point_in_interval.")
@@ -148,95 +94,64 @@ class DataProcessor:
         if distance_threshold <= 0:
             raise ValueError("distance_threshold должен быть > 0.")
 
-        # Оставляем только точки требуемого типа.
-        clean_df = df.loc[df["status"] == target_status].copy()
+        status_changed = (df["status"].ne(df["status"].shift()))
+        interval_ids = status_changed.cumsum()
 
-        if clean_df.empty:
-            return []
+        list_anomaly_df: List[pd.DataFrame] = []
+        list_stand_df: List[pd.DataFrame] = []
+        list_move_df: List[pd.DataFrame] = []
 
-        # Приводим время к datetime.
-        clean_df["_time"] = pd.to_datetime(clean_df["time"], errors="coerce")
-
-        # Вычисляем разрывы времени векторно.
-        time_diff = clean_df["_time"].diff()
-        split_mask = time_diff > pd.Timedelta(seconds=10)
-
-        # Индексы начала временных интервалов.
-        group_ids = split_mask.cumsum()
-
-        result_list: List[pd.DataFrame] = []
-
-        # Обрабатываем каждый независимый временной интервал.
-        for _, group in clean_df.groupby(group_ids, sort=False):
-            group = group.drop(columns="_time")
-            group_size = len(group)
-
-            # Интервалы менее 10 точек не учитываем.
-            if group_size < min_point_in_interval:
-                logging.debug("Интервал %s отброшен: %d точек (< %d)",
-                              target_status,
-                              group_size,
-                              min_point_in_interval
-                              )
+        for _, group in df.groupby(interval_ids, sort=False):
+            if group.empty:
                 continue
 
-            # Если интервал уже помещается в n точек,
-            # дальнейшее разбиение не требуется.
-            if group_size <= max_point_in_interval:
-                result_list.append(group)
+            status = group["status"].iloc[0]
+
+            if status not in {"anomaly", "stand", "move"}:
                 continue
 
-            # Координаты всего интервала.
+            if len(group) < min_point_in_interval:
+                continue
+
+            group = group.copy()
+
             lons = group["lon"].to_numpy(dtype=float)
             lats = group["lat"].to_numpy(dtype=float)
 
-            # Начало текущего подинтервала.
-            chunk_start_idx = 0
+            group_size = len(group)
+            if group_size > 1:
+                lat_array = lats
+                lon_array = lons
 
-            while chunk_start_idx < group_size:
-                # Максимальный размер подинтервала по количеству точек.
-                chunk_end_idx = min(chunk_start_idx + max_point_in_interval, group_size)
+                distances = (CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat_array, lon_array))
 
-                # Если дошли до конца интервала, добавляем остаток.
-                if chunk_end_idx >= group_size:
-                    result_list.append(group.iloc[chunk_start_idx:chunk_end_idx])
-                    break
+                distances = np.asarray(distances, dtype=float)
 
-                # Проверяем пространственное ограничение на длину.
-                start_lon = lons[chunk_start_idx]
-                start_lat = lats[chunk_start_idx]
+                distance_split = (distances > distance_threshold)
 
-                candidate_lons = lons[chunk_start_idx + 1: chunk_end_idx]
-                candidate_lats = lats[chunk_start_idx + 1: chunk_end_idx]
+            else:
+                distance_split = np.empty(0,dtype=bool)
 
-                # Формируем массивы стартовых координат.
-                start_lons = np.full(len(candidate_lons), start_lon, dtype=float)
-                start_lats = np.full(len(candidate_lats), start_lat, dtype=float)
+            max_points_split = (np.arange(group_size) % max_point_in_interval == 0)
+            max_points_split[0] = False
+            split_mask = max_points_split.copy()
 
-                distances = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(
-                    np.column_stack((start_lats, candidate_lats)),
-                    np.column_stack((start_lons, candidate_lons)),
-                )
+            if group_size > 1:
+                split_mask[1:] |= distance_split
+            subinterval_ids = split_mask.cumsum()
 
-                # Ищем первую точку, на которой достигнут threshold.
-                threshold_positions = np.flatnonzero(distances >= distance_threshold)
+            for _, subinterval in group.groupby(subinterval_ids, sort=False):
+                if len(subinterval) < min_point_in_interval:
+                    continue
 
-                if threshold_positions.size == 0:
-                    # Пространственный threshold не достигнут.
-                    # Берём максимум n точек.
-                    result_list.append(group.iloc[chunk_start_idx:chunk_end_idx])
-                    chunk_start_idx = chunk_end_idx
-
+                if status == "anomaly":
+                    list_anomaly_df.append(subinterval.copy())
+                elif status == "stand":
+                    list_stand_df.append(subinterval.copy())
                 else:
-                    # Первая точка, достигшая spatial threshold.
-                    split_position = int(threshold_positions[0])
-                    split_idx = chunk_start_idx + 1 + split_position
+                    list_move_df.append(subinterval.copy())
 
-                    result_list.append(group.iloc[chunk_start_idx: split_idx + 1])
-
-                    chunk_start_idx = split_idx + 1
-
-        return result_list
+        return (list_anomaly_df, list_stand_df, list_move_df)
 
     @staticmethod
     def get_lon_lat(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -437,6 +352,7 @@ if __name__ == "__main__":
     path = Path(__file__).parent.parent.parent / "data" / "1.csv"
     df = DataProcessor.load_csv(path)
     df = DataProcessor.pre_filter(df)
+    df = df[:100000]
 
     list_anomaly_df, list_stand_df, list_move_df = DataProcessor.parse_intervals(df)
     logging.debug(list_anomaly_df[-1])
