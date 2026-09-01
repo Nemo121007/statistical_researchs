@@ -118,13 +118,11 @@ class KalmanFilterRW:
 
                     if mahalanobis_dist >= 0.0:
                         mahalanobis_sq[k] = mahalanobis_dist
-
                         log_likelihood[k] = -0.5 * (dim * log_2pi + logdet + mahalanobis_dist)
                     else:
                         # Теоретически такого быть не должно
                         # для корректной S.
                         solved_innovation = np.linalg.pinv(S) @ innovation
-
                 except np.linalg.LinAlgError:
                     solved_innovation = (np.linalg.pinv(S) @ innovation)
             else:
@@ -138,9 +136,7 @@ class KalmanFilterRW:
 
             # Joseph form.
             I_KH = I - K @ H
-
             P = I_KH @ P_pred @ I_KH.T + K @ R @ K.T
-
             P = 0.5 * P + P.T
 
             filtered_x[k] = X_state[0, 0]

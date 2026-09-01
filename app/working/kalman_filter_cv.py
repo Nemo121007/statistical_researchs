@@ -105,7 +105,6 @@ class KalmanFilterCV:
         )
 
         R = np.eye(2, dtype=np.float64) * (self.sigma_meas ** 2)
-
         I = np.eye(4, dtype=np.float64,)
         # ---------------------------------------------------------
         # Инициализация
@@ -151,13 +150,11 @@ class KalmanFilterCV:
         # Результаты
         # ---------------------------------------------------------
         filtered_x = np.zeros(len(x), dtype=np.float64)
-
         filtered_y = np.zeros(len(y), dtype=np.float64)
 
         filtered_x[0] = x[0]
         filtered_y[0] = y[0]
         log_likelihood = np.full(len(x), np.nan, dtype=np.float64)
-
         mahalanobis_sq = np.full(len(x), np.nan, dtype=np.float64)
 
         log_2pi = np.log(2.0 * np.pi)
@@ -175,7 +172,6 @@ class KalmanFilterCV:
             # -----------------------------------------------------
             # Prediction
             # -----------------------------------------------------
-
             F = self._get_transition_matrix(dt)
             Q = self._get_process_noise_matrix(dt)
 
@@ -185,7 +181,6 @@ class KalmanFilterCV:
             # -----------------------------------------------------
             # Update
             # -----------------------------------------------------
-
             z = np.array(
                 [
                     x[k],
@@ -207,20 +202,16 @@ class KalmanFilterCV:
             # -----------------------------------------------------
             # log likelihood и Mahalanobis
             # -----------------------------------------------------
-
             sign, logdet = np.linalg.slogdet(S)
             if sign > 0.0 and np.isfinite(logdet):
                 try:
                     # S @ solution = innovation
                     solved_innovation = np.linalg.solve(S, innovation)
-
                     mahalanobis_dist = float(innovation.T @ solved_innovation)
 
                     if mahalanobis_dist >= 0.0:
                         mahalanobis_sq[k] = mahalanobis_dist
-
                         log_likelihood[k] = -0.5 * (dim * log_2pi + logdet + mahalanobis_dist)
-
                     else:
                         # Теоретически для корректной
                         # положительно определённой S
@@ -236,22 +227,17 @@ class KalmanFilterCV:
             # Kalman Gain
             # -----------------------------------------------------
             # K = P_pred H^T S^-1
-            #
             # Вместо вычисления S^-1:
             kalman_gain = np.linalg.solve(S, H @ P_pred).T
-
             # -----------------------------------------------------
             # State update
             # -----------------------------------------------------
             X_state = X_pred + kalman_gain @ innovation
-
             # -----------------------------------------------------
             # Joseph form covariance update
             # -----------------------------------------------------
-
             I_KH = I - kalman_gain @ H
             P = I_KH @ P_pred @ I_KH.T + kalman_gain @ R @ kalman_gain.T
-
             # Возвращаем симметричность.
             P = 0.5 * (P + P.T)
 

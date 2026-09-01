@@ -113,13 +113,9 @@ class DataProcessor:
             if group_size > 1:
                 lat_array = lats
                 lon_array = lons
-
                 distances = (CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat_array, lon_array))
-
                 distances = np.asarray(distances, dtype=float)
-
                 distance_split = (distances > distance_threshold)
-
             else:
                 distance_split = np.empty(0,dtype=bool)
 
@@ -142,7 +138,7 @@ class DataProcessor:
                 else:
                     list_move_df.append(subinterval.copy())
 
-        return (list_anomaly_df, list_stand_df, list_move_df)
+        return list_anomaly_df, list_stand_df, list_move_df
 
     @staticmethod
     def get_lon_lat(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:

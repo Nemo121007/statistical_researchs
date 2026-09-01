@@ -575,59 +575,31 @@ class CollectStatistics:
                 for percentile_value, label in (
                     percentile_data
                 ):
-                    ax.axvline(
-                        percentile_value,
+                    ax.axvline(percentile_value,
                         linestyle="--",
                         linewidth=1.1,
-                        label=(
-                            f"{label} = "
-                            f"{percentile_value:.6g}"
-                        ),
+                        label=(f"{label} = {percentile_value:.6g}"),
                     )
 
                 if logarithmic_x:
-                    ax.set_xscale(
-                        "log"
-                    )
-
+                    ax.set_xscale("log")
                     ax.set_title(
-                        "Плотность распределения — "
-                        "логарифмический масштаб X",
+                        "Плотность распределения — логарифмический масштаб X",
                         fontsize=13,
                     )
-
                 else:
                     ax.set_title(
-                        "Плотность распределения — "
-                        "линейный масштаб X",
+                        "Плотность распределения — линейный масштаб X",
                         fontsize=13,
                     )
-
-                ax.set_xlabel(
-                    metric_name,
-                    fontsize=11,
-                )
-
-                ax.set_ylabel(
-                    "Плотность",
-                    fontsize=11,
-                )
-
-                ax.grid(
-                    True,
-                    which="both",
-                    alpha=0.25,
-                )
-
-                ax.legend(
-                    fontsize=8,
-                    loc="best",
-                )
+                ax.set_xlabel(metric_name, fontsize=11)
+                ax.set_ylabel("Плотность", fontsize=11)
+                ax.grid(True, which="both", alpha=0.25)
+                ax.legend(fontsize=8, loc="best")
 
             # ==================================================
             # Левый график
             # ==================================================
-
             draw_density(
                 axes[0],
                 x_linear,
@@ -640,45 +612,24 @@ class CollectStatistics:
             # ==================================================
 
             if log_mode == "log":
-
-                draw_density(
-                    axes[1],
-                    x_log,
-                    density_log,
-                    logarithmic_x=True,
-                )
-
+                draw_density(axes[1], x_log, density_log, logarithmic_x=True)
             else:
-                draw_density(
-                    axes[1],
-                    x_log,
-                    density_log,
-                    logarithmic_x=False,
-                )
+                draw_density(axes[1], x_log, density_log, logarithmic_x=False)
 
                 # Для отрицательных и положительных значений
                 # используется symmetric logarithmic scale.
-                scale = max(
-                    abs(p50) * 1e-3,
-                    1e-9,
-                )
+                scale = max(abs(p50) * 1e-3, 1e-9)
 
-                axes[1].set_xscale(
-                    "symlog",
-                    linthresh=scale,
-                )
+                axes[1].set_xscale("symlog", linthresh=scale)
 
                 axes[1].set_title(
-                    "Плотность распределения — "
-                    "симметричный логарифмический "
-                    "масштаб X",
+                    "Плотность распределения — симметричный логарифмический масштаб X",
                     fontsize=13,
                 )
 
             # ==================================================
             # Отступы
             # ==================================================
-
             fig.subplots_adjust(
                 left=0.06,
                 right=0.98,
@@ -704,15 +655,11 @@ class CollectStatistics:
                 .replace("|", "_")
             )
 
-            output_path = (
-                output_dir
-                / f"{safe_name}.png"
-            )
+            output_path = (output_dir / f"{safe_name}.png")
 
             # ==================================================
             # Сохранение PNG
             # ==================================================
-
             fig.savefig(
                 output_path,
                 dpi=dpi,
@@ -737,19 +684,11 @@ class CollectStatistics:
         # Сводная таблица
         # ======================================================
 
-        summary_df = pd.DataFrame(
-            summary_rows
-        )
+        summary_df = pd.DataFrame(summary_rows)
 
-        summary_path = (
-            output_dir
-            / "summary.csv"
-        )
+        summary_path = (output_dir / "summary.csv")
 
-        summary_df.to_csv(
-            summary_path,
-            index=False,
-        )
+        summary_df.to_csv(summary_path, index=False)
 
         return summary_df
 
