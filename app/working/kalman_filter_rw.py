@@ -21,100 +21,127 @@ class KalmanFilterRW:
         self.sigma_meas = sigma_meas
 
     def filter(
-            self, x: np.ndarray, y: np.ndarray, time: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        # pylint: disable=too-many-locals
+            self,
+            x: np.ndarray,
+            y: np.ndarray,
+            time: np.ndarray,
+    ) -> Tuple[
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+    ]:
         """
-        Применяет фильтр Калмана к траектории и вычисляет логарифм правдоподобия.
-
-        Args:
-            x: Массив координат X (в метрах).
-            y: Массив координат Y (в метрах).
-            time: Массив времени (в секундах).
-
-        Returns:
-            Tuple[np.ndarray, np.ndarray, np.ndarray]:
-            - Сглаженные координаты X.
-            - Сглаженные координаты Y.
-            - Массив логарифмов правдоподобия (log-likelihood).
+        Применяет фильтр Калмана RW к серии измерений.
+        time содержит np.datetime64.
+        Внутри фильтра dt переводится в секунды.
         """
+        if not len(x) == len(y) == len(time):
+            raise ValueError("x, y и time должны иметь одинаковую длину")
+
+        x = np.asarray(x, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float64)
+
         if len(x) < 2:
-            return x, y, np.array([]), np.array([])
+            return (x, y, np.full(len(x), np.nan, dtype=np.float64,), np.full(len(x), np.nan, dtype=np.float64))
 
         n_dim = 2
 
-        # Матрица перехода F = I
-        F = np.eye(n_dim)
+        F = np.eye(n_dim, dtype=np.float64)
 
-        # Матрица измерений H = I
-        H = np.eye(n_dim)
+        H = np.eye(n_dim, dtype=np.float64)
 
-        # Ковариация шума измерений R
-        R = np.eye(n_dim) * (self.sigma_meas**2)
+        R = (np.eye(n_dim, dtype=np.float64) * self.sigma_meas ** 2)
 
-        # Инициализация состояния X_state = [x, y]
-        X_state = np.array([x[0], y[0]]).reshape(n_dim, 1)
+        I = np.eye(n_dim, dtype=np.float64)
 
-        # Инициализация ковариации ошибки P
-        P = np.eye(n_dim) * (self.sigma_meas**2)
+        X_state = np.array(
+            [
+                x[0],
+                y[0],
+            ],
+            dtype=np.float64,
+        ).reshape(n_dim, 1)
 
-        # Массивы для результатов
-        filtered_x = np.zeros(len(x))
-        filtered_y = np.zeros(len(y))
+        P = np.eye(n_dim, dtype=np.float64) * self.sigma_meas ** 2
+
+        filtered_x = np.zeros(len(x), dtype=np.float64,)
+
+        filtered_y = np.zeros(len(y), dtype=np.float64)
+
         filtered_x[0] = x[0]
         filtered_y[0] = y[0]
+        log_likelihood = np.full(len(x), np.nan, dtype=np.float64)
+        mahalanobis_sq = np.full(len(x), np.nan, dtype=np.float64)
 
-        I = np.eye(n_dim)
-
-        # Переменная для накопления правдоподобия
-        log_likelihood = np.full(len(x), np.nan)
-        mahalanobis_sq = np.full(len(x), np.nan)
-
-        log_2pi = np.log(2 * np.pi)
-        dim = 2  # Размерность измерения
+        log_2pi = np.log(2.0 * np.pi)
+        dim = 2
 
         for k in range(1, len(time)):
-            dt = time[k] - time[k - 1]
-            if dt <= 0:
+            # np.datetime64 -> секунды
+            dt = (time[k] - time[k - 1]) / np.timedelta64(1, "s")
+            dt = float(dt)
+            if dt <= 0.0:
                 dt = 0.0
 
-            # --- Формирование матрицы шума процесса Q ---
-            Q = np.eye(n_dim) * (self.sigma_acc**2 * dt)
+            # Шум процесса RW.
+            Q = np.eye(n_dim, dtype=np.float64) * (self.sigma_acc ** 2 * dt)
 
-            # --- Prediction (Этап предсказания) ---
+            # Prediction.
             X_pred = F @ X_state
             P_pred = P + Q
 
-            # --- Update (Этап коррекции) ---
-            z = np.array([x[k], y[k]]).reshape(n_dim, 1)
+            # Measurement.
+            z = np.array(
+                [
+                    x[k],
+                    y[k],
+                ],
+                dtype=np.float64,
+            ).reshape(n_dim, 1)
 
-            # Невязка (Innovation)
-            y_err = z - (H @ X_pred)
+            # Innovation.
+            innovation = z - H @ X_pred
 
-            # Ковариация невязки
+            # Innovation covariance.
             S = H @ P_pred @ H.T + R
 
-            # --- Вычисление P(y_k | y_(1:k-1)) ---
-            det_S = np.linalg.det(S)
-            # Используем логарифм для численной устойчивости
-            if det_S > 0:
-                S_inv = np.linalg.inv(S)
-                mahalanobis_dist = (y_err.T @ S_inv @ y_err).item()
-                log_likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
-                mahalanobis_sq[k] = mahalanobis_dist
+            S = 0.5 * (S + S.T)
+
+            # Log-likelihood и Mahalanobis².
+            sign, logdet = np.linalg.slogdet(S)
+
+            if sign > 0.0 and np.isfinite(logdet):
+                try:
+                    solved_innovation = np.linalg.solve(S, innovation)
+                    mahalanobis_dist = float(innovation.T @ solved_innovation)
+
+                    if mahalanobis_dist >= 0.0:
+                        mahalanobis_sq[k] = mahalanobis_dist
+
+                        log_likelihood[k] = -0.5 * (dim * log_2pi + logdet + mahalanobis_dist)
+                    else:
+                        # Теоретически такого быть не должно
+                        # для корректной S.
+                        solved_innovation = np.linalg.pinv(S) @ innovation
+
+                except np.linalg.LinAlgError:
+                    solved_innovation = (np.linalg.pinv(S) @ innovation)
             else:
-                # Защита: если матрица вырождена, используем псевдообратную матрицу
-                # для продолжения фильтрации, но правдоподобие не считаем
-                S_inv = np.linalg.pinv(S)
+                solved_innovation = (np.linalg.pinv(S)@ innovation)
 
-            # Коэффициент усиления Калмана
-            K = P_pred @ S_inv
+            # Kalman Gain.
+            K = np.linalg.solve(S, H @ P_pred,).T
 
-            # Обновление состояния
-            X_state = X_pred + K @ y_err
+            # State update.
+            X_state = (X_pred + K @ innovation)
 
-            # Обновление ковариации
-            P = (I - K) @ P_pred
+            # Joseph form.
+            I_KH = I - K @ H
+
+            P = I_KH @ P_pred @ I_KH.T + K @ R @ K.T
+
+            P = 0.5 * P + P.T
 
             filtered_x[k] = X_state[0, 0]
             filtered_y[k] = X_state[1, 0]

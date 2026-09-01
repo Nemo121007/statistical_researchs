@@ -64,113 +64,201 @@ class KalmanFilterCV:
         return Q * (self.sigma_acc**2)
 
     def filter(
-        # pylint: disable=too-many-locals
-        self,
-        x: np.ndarray,
-        y: np.ndarray,
-        time: np.ndarray,
+            # pylint: disable=too-many-locals
+            self,
+            x: np.ndarray,
+            y: np.ndarray,
+            time: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Применяет фильтр Калмана к серии измерений координат.
-        
-        Args:
-            x: Массив измеренных координат X.
-            y: Массив измеренных координат Y.
-            time: Массив временных меток измерений.
+        time содержит np.datetime64. Все временные интервалы
+        внутри фильтра преобразуются в секунды.
 
         Returns:
-            Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: Кортеж из четырех массивов:
-                - Отфильтрованные координаты X.
-                - Отфильтрованные координаты Y.
-                - Логарифмы функции правдоподобия для каждого шага.
-                - Квадраты расстояния Махаланобиса для каждого шага.
+            Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+            - filtered_x: отфильтрованные координаты X;
+            - filtered_y: отфильтрованные координаты Y;
+            - log_likelihood: логарифм правдоподобия каждого наблюдения;
+            - mahalanobis_sq: квадрат расстояния Махаланобиса для каждого наблюдения.
         """
+        if not (len(x) == len(y) == len(time)):
+            raise ValueError("x, y и time должны иметь одинаковую длину")
+
         if len(x) < 2:
-            return x, y, np.array([]), np.array([])
+            return (
+                np.asarray(x, dtype=np.float64),
+                np.asarray(y, dtype=np.float64),
+                np.full(len(x), np.nan, dtype=np.float64),
+                np.full(len(x), np.nan, dtype=np.float64),
+            )
 
-        H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
-        R = np.eye(2) * (self.sigma_meas**2)
-        I = np.eye(4)
+        x = np.asarray(x, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float64)
 
-        # Инициализация скорости
-        dt0 = time[1] - time[0]
+        H = np.array(
+            [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+            ],
+            dtype=np.float64,
+        )
+
+        R = np.eye(2, dtype=np.float64) * (self.sigma_meas ** 2)
+
+        I = np.eye(4, dtype=np.float64,)
+        # ---------------------------------------------------------
+        # Инициализация
+        # ---------------------------------------------------------
+
+        dt0 = (time[1] - time[0]) / np.timedelta64(1, "s")
+        dt0 = float(dt0)
         vx0 = 0.0
         vy0 = 0.0
-        # Защита от деления на ноль или отрицательного времени
-        if dt0 > 0:
+
+        if dt0 > 0.0:
             vx0 = (x[1] - x[0]) / dt0
             vy0 = (y[1] - y[0]) / dt0
-        X_state = np.array([x[0], y[0], vx0, vy0]).reshape(4, 1)
 
-        P = np.eye(4) * 500.0
-        # Если время dt0 валидно, можно уменьшить неопределенность скорости
-        if dt0 > 0:
-            # Дисперсия скорости = 2 * дисперсия измерения / dt^2
-            # (по формуле распространения ошибки для разности двух точек)
-            vel_var = 2 * (self.sigma_meas**2) / (dt0**2)
+        X_state = np.array(
+            [
+                x[0],
+                y[0],
+                vx0,
+                vy0,
+            ],
+            dtype=np.float64,
+        ).reshape(4, 1)
+
+        # Начальная ковариация.
+        P = np.eye(4, dtype=np.float64) * 500.0
+
+        if dt0 > 0.0:
+            # Если две координаты имеют независимую
+            # погрешность sigma_meas, то:
+            #
+            # Var(x2 - x1) = 2 * sigma_meas²
+            #
+            # Var(v) = 2 * sigma_meas² / dt²
+            vel_var = 2.0 * self.sigma_meas ** 2 / dt0 ** 2
             P[2, 2] = vel_var
             P[3, 3] = vel_var
         else:
             P[2, 2] = 100.0
             P[3, 3] = 100.0
 
-        filtered_x = np.zeros(len(x))
-        filtered_y = np.zeros(len(y))
+        # ---------------------------------------------------------
+        # Результаты
+        # ---------------------------------------------------------
+        filtered_x = np.zeros(len(x), dtype=np.float64)
+
+        filtered_y = np.zeros(len(y), dtype=np.float64)
+
         filtered_x[0] = x[0]
         filtered_y[0] = y[0]
+        log_likelihood = np.full(len(x), np.nan, dtype=np.float64)
 
-        # Переменная для накопления правдоподобия
-        log_likelihood = np.full(len(x), np.nan)
-        mahalanobis_sq = np.full(len(x), np.nan)
+        mahalanobis_sq = np.full(len(x), np.nan, dtype=np.float64)
 
-        # Константа для формулы (2 * pi)
-        log_2pi = np.log(2 * np.pi)
-        dim = 2  # Размерность измерения (x, y)
-
+        log_2pi = np.log(2.0 * np.pi)
+        dim = 2
+        # ---------------------------------------------------------
+        # Основной цикл
+        # ---------------------------------------------------------
         for k in range(1, len(time)):
-            dt = time[k] - time[k - 1]
-            if dt <= 0:
+            # np.datetime64 -> секунды
+            dt = (time[k] - time[k - 1]) / np.timedelta64(1, "s")
+            dt = float(dt)
+            # Некорректный dt не должен ломать фильтр.
+            if dt <= 0.0:
                 dt = 0.0
+            # -----------------------------------------------------
+            # Prediction
+            # -----------------------------------------------------
 
-            # --- Prediction ---
             F = self._get_transition_matrix(dt)
             Q = self._get_process_noise_matrix(dt)
 
             X_pred = F @ X_state
             P_pred = F @ P @ F.T + Q
 
-            # --- Update ---
-            z = np.array([x[k], y[k]]).reshape(2, 1)
+            # -----------------------------------------------------
+            # Update
+            # -----------------------------------------------------
 
-            # Невязка (Innovation)
-            y_err = z - (H @ X_pred)
+            z = np.array(
+                [
+                    x[k],
+                    y[k],
+                ],
+                dtype=np.float64,
+            ).reshape(2, 1)
 
-            # Ковариация невязки (Innovation Covariance)
+            # Innovation
+            innovation = z - H @ X_pred
+
+            # Innovation covariance
             S = H @ P_pred @ H.T + R
 
-            # --- Вычисление P(y_k | y_(1:k-1)) ---
-            det_S = np.linalg.det(S)
-            # Используем логарифм для численной устойчивости
-            if det_S > 0:
-                S_inv = np.linalg.inv(S)
-                # Вычисление расстояния Махаланобиса
-                mahalanobis_dist = (y_err.T @ S_inv @ y_err).item()
-                log_likelihood[k] = -0.5 * (dim * log_2pi + np.log(det_S) + mahalanobis_dist)
-                mahalanobis_sq[k] = mahalanobis_dist
-            else:
-                # Защита: если матрица вырождена, используем псевдообратную матрицу
-                # для продолжения фильтрации, но правдоподобие не считаем
-                S_inv = np.linalg.pinv(S)
+            # Накапливаем симметричность из-за
+            # численных погрешностей.
+            S = 0.5 * (S + S.T)
 
-            # Остальной код обновления
-            K = P_pred @ H.T @ S_inv  # S_inv уже вычислен
-            X_state = X_pred + K @ y_err
-            P = (I - K @ H) @ P_pred
+            # -----------------------------------------------------
+            # log likelihood и Mahalanobis
+            # -----------------------------------------------------
+
+            sign, logdet = np.linalg.slogdet(S)
+            if sign > 0.0 and np.isfinite(logdet):
+                try:
+                    # S @ solution = innovation
+                    solved_innovation = np.linalg.solve(S, innovation)
+
+                    mahalanobis_dist = float(innovation.T @ solved_innovation)
+
+                    if mahalanobis_dist >= 0.0:
+                        mahalanobis_sq[k] = mahalanobis_dist
+
+                        log_likelihood[k] = -0.5 * (dim * log_2pi + logdet + mahalanobis_dist)
+
+                    else:
+                        # Теоретически для корректной
+                        # положительно определённой S
+                        # этого быть не должно.
+                        solved_innovation = np.linalg.pinv(S) @ innovation
+
+                except np.linalg.LinAlgError:
+                    solved_innovation = np.linalg.pinv(S) @ innovation
+            else:
+                solved_innovation = np.linalg.pinv(S) @ innovation
+
+            # -----------------------------------------------------
+            # Kalman Gain
+            # -----------------------------------------------------
+            # K = P_pred H^T S^-1
+            #
+            # Вместо вычисления S^-1:
+            kalman_gain = np.linalg.solve(S, H @ P_pred).T
+
+            # -----------------------------------------------------
+            # State update
+            # -----------------------------------------------------
+            X_state = X_pred + kalman_gain @ innovation
+
+            # -----------------------------------------------------
+            # Joseph form covariance update
+            # -----------------------------------------------------
+
+            I_KH = I - kalman_gain @ H
+            P = I_KH @ P_pred @ I_KH.T + kalman_gain @ R @ kalman_gain.T
+
+            # Возвращаем симметричность.
+            P = 0.5 * (P + P.T)
 
             filtered_x[k] = X_state[0, 0]
             filtered_y[k] = X_state[1, 0]
 
-        return filtered_x, filtered_y, log_likelihood, mahalanobis_sq
+        return filtered_x, filtered_y, log_likelihood, mahalanobis_sq,
 
 
 if __name__ == "__main__":

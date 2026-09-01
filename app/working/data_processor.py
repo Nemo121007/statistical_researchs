@@ -31,24 +31,15 @@ class DataProcessor:
         - Удаляет точки с NULL/NaN в lon или lat.
         """
         mask = df[["lon", "lat"]].isna().any(axis=1).sum()
-        logging.debug(
-            "Удалено %d точек с NULL/NaN в lon/lat",
-            mask,
-        )
+        logging.debug("Удалено %d точек с NULL/NaN в lon/lat",mask)
         df = df.dropna(subset=["lon", "lat"])
 
         mask = df["sat"] >= 3
-        logging.debug(
-            "Удалено %d точек с sat < 3",
-            (~mask).sum(),
-        )
+        logging.debug("Удалено %d точек с sat < 3",(~mask).sum())
         df = df[mask]
 
         mask = df["is_water"]
-        logging.debug(
-            "Удалено %d точек с is_water == False",
-            (~mask).sum(),
-        )
+        logging.debug("Удалено %d точек с is_water == False",(~mask).sum(),)
         df = df[mask]
         return df
 
@@ -159,7 +150,7 @@ class DataProcessor:
         return df["lon"].to_numpy(), df["lat"].to_numpy(), df["time"].to_numpy()
 
     @staticmethod
-    def convert_to_local_cartesian(self, lon: np.ndarray, lat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def convert_to_local_cartesian(lon: np.ndarray, lat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Переводит сферические координаты (lon, lat) в локальные прямоугольные (x, y) в метрах.
         """
@@ -179,9 +170,9 @@ class DataProcessor:
         lat0 = lat[first_valid_idx]
         lon0 = lon[first_valid_idx]
 
-        ky = self.LEN_LAT
+        ky = DataProcessor.LEN_LAT
         lat0_rad = np.radians(lat0)
-        kx = self.LEN_LAT * np.cos(lat0_rad)
+        kx = DataProcessor.LEN_LAT * np.cos(lat0_rad)
 
         x_local = (lon - lon0) * kx
         y_local = (lat - lat0) * ky
