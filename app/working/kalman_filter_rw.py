@@ -41,6 +41,7 @@ class KalmanFilterRW:
 
         x = np.asarray(x, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64)
+        time = np.asarray(time, dtype="datetime64[ns]")
 
         if len(x) < 2:
             return (x, y, np.full(len(x), np.nan, dtype=np.float64,), np.full(len(x), np.nan, dtype=np.float64))
@@ -114,7 +115,7 @@ class KalmanFilterRW:
             if sign > 0.0 and np.isfinite(logdet):
                 try:
                     solved_innovation = np.linalg.solve(S, innovation)
-                    mahalanobis_dist = float(innovation.T @ solved_innovation)
+                    mahalanobis_dist = float((innovation.T @ solved_innovation).item())
 
                     if mahalanobis_dist >= 0.0:
                         mahalanobis_sq[k] = mahalanobis_dist

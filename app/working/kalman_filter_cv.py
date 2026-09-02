@@ -95,6 +95,7 @@ class KalmanFilterCV:
 
         x = np.asarray(x, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64)
+        time = np.asarray(time, dtype="datetime64[ns]")
 
         H = np.array(
             [
@@ -207,7 +208,7 @@ class KalmanFilterCV:
                 try:
                     # S @ solution = innovation
                     solved_innovation = np.linalg.solve(S, innovation)
-                    mahalanobis_dist = float(innovation.T @ solved_innovation)
+                    mahalanobis_dist = float((innovation.T @ solved_innovation).item())
 
                     if mahalanobis_dist >= 0.0:
                         mahalanobis_sq[k] = mahalanobis_dist

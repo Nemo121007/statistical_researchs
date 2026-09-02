@@ -20,7 +20,7 @@ class DataProcessor:
     @staticmethod
     def load_csv(path: Path) -> pd.DataFrame:
         """Загружает данные из CSV файла."""
-        return pd.read_csv(path)
+        return pd.read_csv(path, parse_dates=["time"])
 
     @staticmethod
     def pre_filter(df: DataFrame) -> DataFrame:
@@ -142,8 +142,9 @@ class DataProcessor:
 
     @staticmethod
     def get_lon_lat(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Извлекает массивы долгот, широт и времени"""
-        return df["lon"].to_numpy(), df["lat"].to_numpy(), df["time"].to_numpy()
+        """Извлекает массивы долгот, широт и времени (time как np.datetime64)."""
+        time = pd.to_datetime(df["time"]).to_numpy()
+        return df["lon"].to_numpy(), df["lat"].to_numpy(), time
 
     @staticmethod
     def convert_to_local_cartesian(lon: np.ndarray, lat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:

@@ -96,6 +96,9 @@ class CollectStatistics:
         NDArray[np.float64],
         NDArray[np.float64],
         NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
     ]:
         """
         Собирает статистику оценок фильтра Калмана CV для каждой точки трека..
@@ -106,15 +109,19 @@ class CollectStatistics:
         после чего сохраняются метрики последнего наблюдения P[i]:
             log_likelihood[-1]
             mahalanobis_sq[-1]
+            hypot(filtered_x[-1] - x[-1], filtered_y[-1] - y[-1])
         Метрика относится непосредственно к точке P[i] и классифицируется по mark[i].
 
         Returns:
             anomaly_log_likelihood: Логарифмы правдоподобия для anomaly.
             anomaly_mahalanobis_sq: Квадраты расстояния Махаланобиса для anomaly.
+            anomaly_filter_distance: Линейные расстояния между оценкой фильтра и измерением для anomaly.
             move_log_likelihood: Логарифмы правдоподобия для move.
             move_mahalanobis_sq: Квадраты расстояния Махаланобиса для move.
+            move_filter_distance: Линейные расстояния между оценкой фильтра и измерением для move.
             stand_log_likelihood: Логарифмы правдоподобия для stand.
             stand_mahalanobis_sq: Квадраты расстояния Махаланобиса для stand.
+            stand_filter_distance: Линейные расстояния между оценкой фильтра и измерением для stand.
         """
         if not (len(lon) == len(lat) == len(time) == len(mark)):
             raise ValueError("lon, lat, time и mark должны иметь одинаковую длину")
@@ -124,14 +131,17 @@ class CollectStatistics:
 
         if len(lon) <= window:
             empty = np.empty(0, dtype=np.float64)
-            return empty, empty, empty, empty, empty, empty
+            return empty, empty, empty, empty, empty, empty, empty, empty, empty
 
         anomaly_log_likelihood = []
         anomaly_mahalanobis_sq = []
+        anomaly_filter_distance = []
         move_log_likelihood = []
         move_mahalanobis_sq = []
+        move_filter_distance = []
         stand_log_likelihood = []
         stand_mahalanobis_sq = []
+        stand_filter_distance = []
 
         for i in range(window, len(lon)):
             lon_window = lon[i - window:i + 1]
@@ -143,32 +153,42 @@ class CollectStatistics:
             x_window, y_window = (DataProcessor.convert_to_local_cartesian(lon_window, lat_window))
 
             kf = KalmanFilterCV()
-            (_, _, log_likelihood, mahalanobis_sq) = kf.filter(x_window, y_window, time_window)
+            (filtered_x, filtered_y, log_likelihood, mahalanobis_sq) = kf.filter(x_window, y_window, time_window)
 
             # Последнее значение соответствует именно P[i].
             current_log_likelihood = log_likelihood[-1]
             current_mahalanobis_sq = mahalanobis_sq[-1]
+            current_filter_distance = float(np.hypot(
+                filtered_x[-1] - x_window[-1],
+                filtered_y[-1] - y_window[-1],
+            ))
             current_mark = mark[i]
 
             if current_mark == "anomaly":
                 anomaly_log_likelihood.append(current_log_likelihood)
                 anomaly_mahalanobis_sq.append(current_mahalanobis_sq)
+                anomaly_filter_distance.append(current_filter_distance)
 
             elif current_mark == "move":
                 move_log_likelihood.append(current_log_likelihood)
                 move_mahalanobis_sq.append(current_mahalanobis_sq)
+                move_filter_distance.append(current_filter_distance)
 
             elif current_mark == "stand":
                 stand_log_likelihood.append(current_log_likelihood)
                 stand_mahalanobis_sq.append(current_mahalanobis_sq)
+                stand_filter_distance.append(current_filter_distance)
 
         return (
             np.asarray(anomaly_log_likelihood, dtype=np.float64),
             np.asarray(anomaly_mahalanobis_sq, dtype=np.float64),
+            np.asarray(anomaly_filter_distance, dtype=np.float64),
             np.asarray(move_log_likelihood, dtype=np.float64),
             np.asarray(move_mahalanobis_sq, dtype=np.float64),
+            np.asarray(move_filter_distance, dtype=np.float64),
             np.asarray(stand_log_likelihood, dtype=np.float64),
             np.asarray(stand_mahalanobis_sq, dtype=np.float64),
+            np.asarray(stand_filter_distance, dtype=np.float64),
         )
 
     @staticmethod
@@ -185,6 +205,9 @@ class CollectStatistics:
         NDArray[np.float64],
         NDArray[np.float64],
         NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
+        NDArray[np.float64],
     ]:
         """
         Собирает статистику оценок фильтра Калмана RW для каждой точки трека.
@@ -194,6 +217,7 @@ class CollectStatistics:
         RW-фильтр последовательно обрабатывает точки окна, после чего сохраняются метрики последнего наблюдения P[i]:
             log_likelihood[-1]
             mahalanobis_sq[-1]
+            hypot(filtered_x[-1] - x[-1], filtered_y[-1] - y[-1])
         Метрика относится непосредственно к точке P[i] и
         классифицируется по mark[i].
         Returns:
@@ -201,13 +225,19 @@ class CollectStatistics:
 
             anomaly_mahalanobis_sq: Квадраты расстояния Махаланобиса для anomaly.
 
+            anomaly_filter_distance: Линейные расстояния между оценкой фильтра и измерением для anomaly.
+
             move_log_likelihood: Логарифмы правдоподобия для move.
 
             move_mahalanobis_sq: Квадраты расстояния Махаланобиса для move.
 
+            move_filter_distance: Линейные расстояния между оценкой фильтра и измерением для move.
+
             stand_log_likelihood: Логарифмы правдоподобия для stand.
 
             stand_mahalanobis_sq: Квадраты расстояния Махаланобиса для stand.
+
+            stand_filter_distance: Линейные расстояния между оценкой фильтра и измерением для stand.
         """
         if not (len(lon) == len(lat) == len(time) == len(mark)):
             raise ValueError("lon, lat, time и mark должны иметь одинаковую длину")
@@ -218,14 +248,17 @@ class CollectStatistics:
         if len(lon) <= window:
             empty = np.empty(0, dtype=np.float64)
 
-            return empty, empty, empty, empty, empty, empty
+            return empty, empty, empty, empty, empty, empty, empty, empty, empty
 
         anomaly_log_likelihood = []
         anomaly_mahalanobis_sq = []
+        anomaly_filter_distance = []
         move_log_likelihood = []
         move_mahalanobis_sq = []
+        move_filter_distance = []
         stand_log_likelihood = []
         stand_mahalanobis_sq = []
+        stand_filter_distance = []
 
         for i in range(window, len(lon)):
             lon_window = lon[i - window:i + 1]
@@ -234,32 +267,42 @@ class CollectStatistics:
             # Все точки окна переводятся в одну локальную декартову систему координат.
             x_window, y_window = DataProcessor.convert_to_local_cartesian(lon_window, lat_window)
             kf = KalmanFilterRW()
-            _, _, log_likelihood, mahalanobis_sq = kf.filter(x_window, y_window, time_window)
+            filtered_x, filtered_y, log_likelihood, mahalanobis_sq = kf.filter(x_window, y_window, time_window)
 
             # Последнее значение соответствует P[i].
             current_log_likelihood = log_likelihood[-1]
             current_mahalanobis_sq = mahalanobis_sq[-1]
+            current_filter_distance = float(np.hypot(
+                filtered_x[-1] - x_window[-1],
+                filtered_y[-1] - y_window[-1],
+            ))
             current_mark = mark[i]
 
             if current_mark == "anomaly":
                 anomaly_log_likelihood.append(current_log_likelihood)
                 anomaly_mahalanobis_sq.append(current_mahalanobis_sq)
+                anomaly_filter_distance.append(current_filter_distance)
 
             elif current_mark == "move":
                 move_log_likelihood.append(current_log_likelihood)
                 move_mahalanobis_sq.append(current_mahalanobis_sq)
+                move_filter_distance.append(current_filter_distance)
 
             elif current_mark == "stand":
                 stand_log_likelihood.append(current_log_likelihood)
                 stand_mahalanobis_sq.append(current_mahalanobis_sq)
+                stand_filter_distance.append(current_filter_distance)
 
         return (
             np.asarray(anomaly_log_likelihood, dtype=np.float64),
             np.asarray(anomaly_mahalanobis_sq, dtype=np.float64),
+            np.asarray(anomaly_filter_distance, dtype=np.float64),
             np.asarray(move_log_likelihood, dtype=np.float64),
             np.asarray(move_mahalanobis_sq, dtype=np.float64),
+            np.asarray(move_filter_distance, dtype=np.float64),
             np.asarray(stand_log_likelihood, dtype=np.float64),
             np.asarray(stand_mahalanobis_sq, dtype=np.float64),
+            np.asarray(stand_filter_distance, dtype=np.float64),
         )
 
     # ==========================================================
@@ -383,6 +426,45 @@ class CollectStatistics:
         return x, density
 
     # ==========================================================
+    # ПОСТРОЕНИЕ ФУНКЦИИ РАСПРЕДЕЛЕНИЯ
+    # ==========================================================
+    @staticmethod
+    def _build_cdf(
+        values: NDArray[np.float64],
+        bins: int = 2000,
+    ) -> Tuple[
+        NDArray[np.float64],
+        NDArray[np.float64],
+    ]:
+        """
+        Строит эмпирическую функцию распределения F(x) = P(X ≤ x).
+
+        Все исходные значения участвуют в расчёте. Для отрисовки
+        ECDF прореживается до bins точек по рангу, поэтому график
+        остаётся монотонно неубывающим и заканчивается в 1.
+        """
+        values = np.asarray(values, dtype=np.float64).reshape(-1)
+        values = values[np.isfinite(values)]
+
+        if values.size == 0:
+            empty = np.empty(0, dtype=np.float64)
+            return empty, empty
+
+        sorted_values = np.sort(values)
+        n = sorted_values.size
+
+        sample_count = min(max(int(bins), 10), n)
+        idx = np.unique(np.round(np.linspace(0, n - 1, sample_count)).astype(np.int64))
+
+        x = sorted_values[idx]
+        cdf = (idx + 1).astype(np.float64) / n
+
+        x = np.concatenate([[sorted_values[0]], x, [sorted_values[-1]]])
+        cdf = np.concatenate([[0.0], cdf, [1.0]])
+
+        return x, cdf
+
+    # ==========================================================
     # ВИЗУАЛИЗАЦИЯ
     # ==========================================================
     @staticmethod
@@ -403,25 +485,26 @@ class CollectStatistics:
         1. Все NaN и +/-inf удаляются.
         2. Среднее, дисперсия и перцентили рассчитываются
            по всей исходной выборке.
-        3. Вся выборка агрегируется в bins.
-        4. По bins строится сглаженная плотность.
-        5. Создаётся PNG высокого качества.
-        6. График содержит два горизонтальных подграфика:
+        3. Строится эмпирическая функция распределения F(x) = P(X ≤ x).
+        4. Создаётся PNG высокого качества.
+        5. График содержит два горизонтальных подграфика:
              - линейный масштаб;
              - логарифмический масштаб.
-        7. На графиках отображаются P5, P25, P50, P75, P95.
-        8. В заголовке отображаются название, математическое
+        6. На графиках отображаются P5, P25, P50, P75, P95
+           разными цветами.
+        7. В заголовке отображаются название, математическое
            ожидание и дисперсия.
         Для положительных метрик: второй график использует log X.
         Для метрик, которые могут иметь отрицательные значения
         (например log_likelihood): второй график использует symlog X.
-        Статистика рассчитывается по всем исходным значениям, агрегация применяется только к построению плотности.
+        Статистика рассчитывается по всем исходным значениям.
         Дополнительно сохраняется summary.csv.
         Args:
             statistics: Словарь: имя метрики -> массив значений.
             output_dir: Каталог для сохранения PNG.
-            bins: Количество bins для агрегации.
-            smoothing_sigma: Параметр сглаживания плотности.
+            bins: Количество точек ECDF для отрисовки.
+            smoothing_sigma: Сохранён для совместимости API,
+                на функцию распределения не влияет.
 
             dpi: DPI сохраняемых PNG.
             figsize: Размер каждого графика.
@@ -484,43 +567,8 @@ class CollectStatistics:
             # Определяем возможность log X
             # ==================================================
             strictly_positive = np.all(values > 0.0)
-            # ==================================================
-            # Линейная плотность
-            # ==================================================
-            x_linear, density_linear = (
-                CollectStatistics._build_density(
-                    values=values,
-                    bins=bins,
-                    smoothing_sigma=smoothing_sigma,
-                    log_scale=False,
-                )
-            )
 
-            # ==================================================
-            # Плотность для второго графика
-            # ==================================================
-
-            if strictly_positive:
-                x_log, density_log = (
-                    CollectStatistics._build_density(
-                        values=values,
-                        bins=bins,
-                        smoothing_sigma=smoothing_sigma,
-                        log_scale=True,
-                    )
-                )
-
-                log_mode = "log"
-
-            else:
-                # Для log_likelihood обычная логарифмическая
-                # шкала X невозможна.
-                #
-                # Строим плотность в линейных координатах,
-                # а отображаем X через symlog.
-                x_log = x_linear
-                density_log = density_linear
-                log_mode = "symlog"
+            x_cdf, y_cdf = CollectStatistics._build_cdf(values=values, bins=bins)
 
             fig, axes = plt.subplots(1, 2, figsize=figsize)
             fig.suptitle(
@@ -546,84 +594,88 @@ class CollectStatistics:
             )
 
             percentile_data = (
-                (float(p05), "P5"),
-                (float(p25), "P25"),
-                (float(p50), "P50"),
-                (float(p75), "P75"),
-                (float(p95), "P95"),
+                (float(p05), "P5", 0.05, "#1b9e77"),
+                (float(p25), "P25", 0.25, "#d95f02"),
+                (float(p50), "P50", 0.50, "#7570b3"),
+                (float(p75), "P75", 0.75, "#e7298a"),
+                (float(p95), "P95", 0.95, "#66a61e"),
             )
 
             # ==================================================
             # Вложенная функция построения графика
             # ==================================================
 
-            def draw_density(
+            def draw_cdf(
                 ax,
                 x_data,
-                density_data,
+                cdf_data,
                 logarithmic_x: bool,
             ) -> None:
 
-                positive_density = density_data > 0.0
-
                 ax.plot(
-                    x_data[positive_density],
-                    density_data[positive_density],
+                    x_data,
+                    cdf_data,
+                    color="#222222",
                     linewidth=2.0,
+                    label="F(x) = P(X ≤ x)",
                 )
 
-                for percentile_value, label in (
-                    percentile_data
-                ):
-                    ax.axvline(percentile_value,
+                for percentile_value, label, probability, color in percentile_data:
+                    ax.axvline(
+                        percentile_value,
+                        color=color,
                         linestyle="--",
-                        linewidth=1.1,
+                        linewidth=1.4,
                         label=(f"{label} = {percentile_value:.6g}"),
                     )
+                    ax.axhline(
+                        probability,
+                        color=color,
+                        linestyle=":",
+                        linewidth=1.0,
+                        alpha=0.7,
+                    )
+
+                ax.set_ylim(-0.02, 1.05)
+                ax.set_ylabel("F(x) = P(X ≤ x)", fontsize=11)
+                ax.set_xlabel(metric_name, fontsize=11)
+                ax.grid(True, which="both", alpha=0.25)
+                ax.legend(fontsize=8, loc="lower right")
 
                 if logarithmic_x:
                     ax.set_xscale("log")
                     ax.set_title(
-                        "Плотность распределения — логарифмический масштаб X",
+                        "Функция распределения — логарифмический масштаб X",
                         fontsize=13,
                     )
                 else:
                     ax.set_title(
-                        "Плотность распределения — линейный масштаб X",
+                        "Функция распределения — линейный масштаб X",
                         fontsize=13,
                     )
-                ax.set_xlabel(metric_name, fontsize=11)
-                ax.set_ylabel("Плотность", fontsize=11)
-                ax.grid(True, which="both", alpha=0.25)
-                ax.legend(fontsize=8, loc="best")
 
             # ==================================================
             # Левый график
             # ==================================================
-            draw_density(
+            draw_cdf(
                 axes[0],
-                x_linear,
-                density_linear,
+                x_cdf,
+                y_cdf,
                 logarithmic_x=False,
             )
 
             # ==================================================
             # Правый график
             # ==================================================
-
-            if log_mode == "log":
-                draw_density(axes[1], x_log, density_log, logarithmic_x=True)
+            if strictly_positive:
+                draw_cdf(axes[1], x_cdf, y_cdf, logarithmic_x=True)
             else:
-                draw_density(axes[1], x_log, density_log, logarithmic_x=False)
+                draw_cdf(axes[1], x_cdf, y_cdf, logarithmic_x=False)
 
-                # Для отрицательных и положительных значений
-                # используется symmetric logarithmic scale.
                 scale = max(abs(p50) * 1e-3, 1e-9)
-
                 axes[1].set_xscale("symlog", linthresh=scale)
-
                 axes[1].set_title(
-                    "Плотность распределения — симметричный логарифмический масштаб X",
+                    "Функция распределения — симметричный логарифмический масштаб X",
                     fontsize=13,
                 )
 
@@ -699,10 +751,12 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
-    path = Path("/home/ubuntu/PycharmProjects/statistical_researchs/data/1.csv")
+    path_root = Path(__file__).parent.parent.parent
+    path = path_root / "data" / "1.csv"
 
     df = DataProcessor.load_csv(path)
     df = DataProcessor.pre_filter(df)
+    df = df[120_000: 130_000]  # Ограничение для тестирования на небольшом объёме данных
     lon, lat, time = DataProcessor.get_lon_lat(df)
     mark = df["status"].to_numpy()
 
@@ -713,17 +767,64 @@ if __name__ == "__main__":
     (
         anomaly_log_likelihood_CV,
         anomaly_mahalanobis_sq_CV,
+        anomaly_filter_distance_CV,
         move_log_likelihood_CV,
         move_mahalanobis_sq_CV,
+        move_filter_distance_CV,
         stand_log_likelihood_CV,
         stand_mahalanobis_sq_CV,
+        stand_filter_distance_CV,
     ) = CollectStatistics.collect_estimation_kalman_filter_cv(lon, lat, time, mark, window=10)
 
     (
         anomaly_log_likelihood_RW,
         anomaly_mahalanobis_sq_RW,
+        anomaly_filter_distance_RW,
         move_log_likelihood_RW,
         move_mahalanobis_sq_RW,
+        move_filter_distance_RW,
         stand_log_likelihood_RW,
         stand_mahalanobis_sq_RW,
+        stand_filter_distance_RW,
     ) = CollectStatistics.collect_estimation_kalman_filter_rw(lon, lat, time, mark, window=10)
+
+    statistics = {
+        "distances_anomaly": distances_anomaly,
+        "distances_move": distances_move,
+        "distances_stand": distances_stand,
+        "anomaly_log_likelihood_CV": anomaly_log_likelihood_CV,
+        "anomaly_mahalanobis_sq_CV": anomaly_mahalanobis_sq_CV,
+        "anomaly_filter_distance_CV": anomaly_filter_distance_CV,
+        "move_log_likelihood_CV": move_log_likelihood_CV,
+        "move_mahalanobis_sq_CV": move_mahalanobis_sq_CV,
+        "move_filter_distance_CV": move_filter_distance_CV,
+        "stand_log_likelihood_CV": stand_log_likelihood_CV,
+        "stand_mahalanobis_sq_CV": stand_mahalanobis_sq_CV,
+        "stand_filter_distance_CV": stand_filter_distance_CV,
+        "anomaly_log_likelihood_RW": anomaly_log_likelihood_RW,
+        "anomaly_mahalanobis_sq_RW": anomaly_mahalanobis_sq_RW,
+        "anomaly_filter_distance_RW": anomaly_filter_distance_RW,
+        "move_log_likelihood_RW": move_log_likelihood_RW,
+        "move_mahalanobis_sq_RW": move_mahalanobis_sq_RW,
+        "move_filter_distance_RW": move_filter_distance_RW,
+        "stand_log_likelihood_RW": stand_log_likelihood_RW,
+        "stand_mahalanobis_sq_RW": stand_mahalanobis_sq_RW,
+        "stand_filter_distance_RW": stand_filter_distance_RW,
+    }
+
+    statistics_dir = path_root / "statistics"
+
+    summary = CollectStatistics.visualize_statistics(
+        statistics=statistics,
+        output_dir=statistics_dir,
+        bins=2000,
+        smoothing_sigma=2.0,
+        dpi=600,
+    )
+
+    print("\nИтоговая статистика:")
+    print(
+        summary.to_string(
+            index=False
+        )
+    )
