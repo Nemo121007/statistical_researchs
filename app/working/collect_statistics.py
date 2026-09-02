@@ -18,9 +18,9 @@ from scipy.ndimage import gaussian_filter1d
 class CollectStatistics:
     @staticmethod
     def collect_distance_between_point(
-            lon: NDArray[np.float64],
-            lat: NDArray[np.float64],
-            mark: NDArray[np.str_],
+        lon: NDArray[np.float64],
+        lat: NDArray[np.float64],
+        mark: NDArray[np.str_],
     ) -> Tuple[
         NDArray[np.float64],
         NDArray[np.float64],
@@ -60,7 +60,7 @@ class CollectStatistics:
 
         # Масштаб одного градуса долготы
         # в локальной системе координат.
-        kx = (DataProcessor.LEN_LAT * np.cos(np.radians(origin_lat)))
+        kx = DataProcessor.LEN_LAT * np.cos(np.radians(origin_lat))
 
         delta_lon = lon[11:] - lon[10:-1]
         delta_lat = lat[11:] - lat[10:-1]
@@ -74,21 +74,21 @@ class CollectStatistics:
 
         # Приоритет:
         # anomaly -> move -> stand.
-        anomaly_mask = ((mark_left == "anomaly") | (mark_right == "anomaly"))
+        anomaly_mask = (mark_left == "anomaly") | (mark_right == "anomaly")
 
-        move_mask = (~anomaly_mask & ((mark_left == "move") | (mark_right == "move")))
+        move_mask = ~anomaly_mask & ((mark_left == "move") | (mark_right == "move"))
 
-        stand_mask = (~anomaly_mask & ~move_mask & (mark_left == "stand") & (mark_right == "stand"))
+        stand_mask = ~anomaly_mask & ~move_mask & (mark_left == "stand") & (mark_right == "stand")
 
         return distance[anomaly_mask], distance[move_mask], distance[stand_mask]
 
     @staticmethod
     def collect_estimation_kalman_filter_cv(
-            lon: NDArray[np.float64],
-            lat: NDArray[np.float64],
-            time: NDArray[np.datetime64],
-            mark: NDArray[np.str_],
-            window: int = 10,
+        lon: NDArray[np.float64],
+        lat: NDArray[np.float64],
+        time: NDArray[np.datetime64],
+        mark: NDArray[np.str_],
+        window: int = 10,
     ) -> Tuple[
         NDArray[np.float64],
         NDArray[np.float64],
@@ -144,24 +144,26 @@ class CollectStatistics:
         stand_filter_distance = []
 
         for i in range(window, len(lon)):
-            lon_window = lon[i - window:i + 1]
-            lat_window = lat[i - window:i + 1]
-            time_window = time[i - window:i + 1]
+            lon_window = lon[i - window : i + 1]
+            lat_window = lat[i - window : i + 1]
+            time_window = time[i - window : i + 1]
 
             # Все точки текущего окна находятся в одной
             # локальной системе координат с началом в P[i-window].
-            x_window, y_window = (DataProcessor.convert_to_local_cartesian(lon_window, lat_window))
+            x_window, y_window = DataProcessor.convert_to_local_cartesian(lon_window, lat_window)
 
             kf = KalmanFilterCV()
-            (filtered_x, filtered_y, log_likelihood, mahalanobis_sq) = kf.filter(x_window, y_window, time_window)
+            filtered_x, filtered_y, log_likelihood, mahalanobis_sq = kf.filter(x_window, y_window, time_window)
 
             # Последнее значение соответствует именно P[i].
             current_log_likelihood = log_likelihood[-1]
             current_mahalanobis_sq = mahalanobis_sq[-1]
-            current_filter_distance = float(np.hypot(
-                filtered_x[-1] - x_window[-1],
-                filtered_y[-1] - y_window[-1],
-            ))
+            current_filter_distance = float(
+                np.hypot(
+                    filtered_x[-1] - x_window[-1],
+                    filtered_y[-1] - y_window[-1],
+                )
+            )
             current_mark = mark[i]
 
             if current_mark == "anomaly":
@@ -193,11 +195,11 @@ class CollectStatistics:
 
     @staticmethod
     def collect_estimation_kalman_filter_rw(
-            lon: NDArray[np.float64],
-            lat: NDArray[np.float64],
-            time: NDArray[np.datetime64],
-            mark: NDArray[np.str_],
-            window: int = 10,
+        lon: NDArray[np.float64],
+        lat: NDArray[np.float64],
+        time: NDArray[np.datetime64],
+        mark: NDArray[np.str_],
+        window: int = 10,
     ) -> Tuple[
         NDArray[np.float64],
         NDArray[np.float64],
@@ -261,9 +263,9 @@ class CollectStatistics:
         stand_filter_distance = []
 
         for i in range(window, len(lon)):
-            lon_window = lon[i - window:i + 1]
-            lat_window = lat[i - window:i + 1]
-            time_window = time[i - window:i + 1]
+            lon_window = lon[i - window : i + 1]
+            lat_window = lat[i - window : i + 1]
+            time_window = time[i - window : i + 1]
             # Все точки окна переводятся в одну локальную декартову систему координат.
             x_window, y_window = DataProcessor.convert_to_local_cartesian(lon_window, lat_window)
             kf = KalmanFilterRW()
@@ -272,10 +274,12 @@ class CollectStatistics:
             # Последнее значение соответствует P[i].
             current_log_likelihood = log_likelihood[-1]
             current_mahalanobis_sq = mahalanobis_sq[-1]
-            current_filter_distance = float(np.hypot(
-                filtered_x[-1] - x_window[-1],
-                filtered_y[-1] - y_window[-1],
-            ))
+            current_filter_distance = float(
+                np.hypot(
+                    filtered_x[-1] - x_window[-1],
+                    filtered_y[-1] - y_window[-1],
+                )
+            )
             current_mark = mark[i]
 
             if current_mark == "anomaly":
@@ -344,7 +348,10 @@ class CollectStatistics:
         value_max = float(np.max(values))
 
         if value_min == value_max:
-            width = max(abs(value_min) * 0.01, 1.0,)
+            width = max(
+                abs(value_min) * 0.01,
+                1.0,
+            )
 
             edges = np.array([value_min - width, value_max + width], dtype=np.float64)
 
@@ -410,9 +417,7 @@ class CollectStatistics:
             x: Координаты плотности.
             density: Сглаженная плотность.
         """
-        x, density, _ = (
-            CollectStatistics.aggregate_distribution(values=values, bins=bins, log_scale=log_scale)
-        )
+        x, density, _ = CollectStatistics.aggregate_distribution(values=values, bins=bins, log_scale=log_scale)
 
         if density.size == 0:
             return x, density
@@ -422,7 +427,10 @@ class CollectStatistics:
             # После сглаживания устраняем небольшие
             # отрицательные значения, которые теоретически
             # могут появиться из-за численной погрешности.
-            density = np.maximum(density,0.0,)
+            density = np.maximum(
+                density,
+                0.0,
+            )
         return x, density
 
     # ==========================================================
@@ -467,6 +475,51 @@ class CollectStatistics:
     # ==========================================================
     # ВИЗУАЛИЗАЦИЯ
     # ==========================================================
+    @staticmethod
+    def _get_display_limits(
+        values: NDArray[np.float64],
+        display_percentile: float = 95.0,
+    ) -> Tuple[float, float]:
+        """
+        Определяет границы видимой области графика.
+        Метод НЕ удаляет значения из массива и НЕ влияет на расчёт
+        статистических характеристик.
+        Args:
+            values: Полный массив значений. Предполагается, что NaN и inf уже удалены.
+            display_percentile: Процент центральной части распределения, которую нужно показать на графике.
+        Returns:
+            Нижняя и верхняя границы отображаемой области X.
+        """
+        values = np.asarray(
+            values,
+            dtype=np.float64,
+        ).reshape(-1)
+
+        if values.size == 0:
+            raise ValueError("Невозможно определить границы отображения для пустого массива")
+
+        if not 0.0 < display_percentile <= 100.0:
+            raise ValueError("display_percentile должен находиться в диапазоне (0, 100]")
+
+        tail_percentile = (100.0 - display_percentile) / 2.0
+
+        lower = float(np.percentile(values, tail_percentile))
+
+        upper = float(np.percentile(values, 100.0 - tail_percentile))
+
+        # Для константного массива или ситуации,
+        # когда оба перцентиля совпали.
+        if lower == upper:
+            value = lower
+            padding = max(
+                abs(value) * 0.01,
+                1.0,
+            )
+            lower = value - padding
+            upper = value + padding
+
+        return lower, upper
+
     @staticmethod
     def visualize_statistics(
         statistics: Mapping[
@@ -540,7 +593,7 @@ class CollectStatistics:
 
             maximum = float(np.max(values))
 
-            p05, p25, p50, p75, p95 = np.percentile(values,[5, 25, 50, 75, 95])
+            p05, p25, p50, p75, p95 = np.percentile(values, [5, 25, 50, 75, 95])
 
             # ==================================================
             # Сохраняем статистику
@@ -581,13 +634,7 @@ class CollectStatistics:
             fig.text(
                 0.5,
                 0.925,
-                (
-                    f"E[X] = {mean:.8g}"
-                    f"    |    "
-                    f"Var[X] = {variance:.8g}"
-                    f"    |    "
-                    f"N = {values.size:,}"
-                ),
+                (f"E[X] = {mean:.8g}" f"    |    " f"Var[X] = {variance:.8g}" f"    |    " f"N = {values.size:,}"),
                 ha="center",
                 va="center",
                 fontsize=12,
@@ -605,29 +652,297 @@ class CollectStatistics:
             # Вложенная функция построения графика
             # ==================================================
 
+    @staticmethod
+    def visualize_statistics(
+        statistics: Mapping[
+            str,
+            NDArray[np.float64] | list | tuple,
+        ],
+        output_dir: Path,
+        bins: int = 2000,
+        smoothing_sigma: float = 2.0,
+        dpi: int = 600,
+        figsize: Tuple[float, float] = (18.0, 7.5),
+        display_percentile: float = 95.0,
+    ) -> pd.DataFrame:
+        """
+        Визуализирует переданные статистические массивы.
+
+        Для каждой метрики:
+
+            1. Из исходного массива удаляются только NaN и +/-inf.
+            2. Все статистические характеристики рассчитываются
+               по полной выборке.
+            3. Строится ECDF по полной выборке.
+            4. Для отрисовки ECDF используется прореживание,
+               выполняемое внутри _build_cdf().
+            5. Создаётся PNG высокого качества.
+            6. График состоит из двух горизонтальных подграфиков:
+                 - линейная шкала X;
+                 - логарифмическая шкала X для положительных
+                   распределений;
+                 - symlog для распределений с отрицательными
+                   значениями.
+            7. На обоих графиках отмечаются P5, P25, P50, P75, P95.
+            8. Область X принудительно ограничивается
+               display_percentile центральной частью распределения.
+            9. Хвостовые значения НЕ удаляются, а только скрываются
+               за пределами отображаемой области.
+           10. Сохраняется summary.csv.
+
+        Args:
+            statistics:
+                Словарь:
+                    имя метрики -> полный массив значений.
+
+            output_dir:
+                Каталог для сохранения PNG.
+
+            bins:
+                Максимальное количество точек ECDF,
+                используемых непосредственно для отрисовки.
+
+            smoothing_sigma:
+                Сохраняется в API для совместимости.
+                Для ECDF не используется.
+
+            dpi:
+                DPI сохраняемого PNG.
+
+            figsize:
+                Размер фигуры в дюймах.
+
+            display_percentile:
+                Центральная часть распределения,
+                отображаемая на графике.
+
+                Например:
+
+                    95 -> P2.5 ... P97.5
+                    99 -> P0.5 ... P99.5
+                    100 -> min ... max
+
+                Значения за пределами диапазона не удаляются.
+
+        Returns:
+            DataFrame со статистикой всех метрик.
+        """
+        if not 0.0 < display_percentile <= 100.0:
+            raise ValueError("display_percentile должен находиться " "в диапазоне (0, 100]")
+
+        output_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        summary_rows = []
+
+        for metric_name, raw_values in statistics.items():
+
+            # ======================================================
+            # Подготовка исходного массива
+            # ======================================================
+
+            values = np.asarray(
+                raw_values,
+                dtype=np.float64,
+            ).reshape(-1)
+
+            # Удаляем только NaN и +/-inf.
+            # Реальные хвосты распределения НЕ удаляются.
+            values = values[np.isfinite(values)]
+
+            if values.size == 0:
+                print(f"[WARNING] {metric_name}: " "нет конечных значений")
+                continue
+
+            # ======================================================
+            # Статистика по ВСЕМ значениям
+            # ======================================================
+
+            mean = float(np.mean(values))
+
+            variance = float(
+                np.var(
+                    values,
+                    ddof=0,
+                )
+            )
+
+            std = float(
+                np.std(
+                    values,
+                    ddof=0,
+                )
+            )
+
+            minimum = float(np.min(values))
+
+            maximum = float(np.max(values))
+
+            p05, p25, p50, p75, p95 = np.percentile(
+                values,
+                [5, 25, 50, 75, 95],
+            )
+
+            # ======================================================
+            # Границы отображения
+            #
+            # ВАЖНО:
+            # это НЕ фильтрация values.
+            # Это только xlim графика.
+            # ======================================================
+
+            display_min, display_max = CollectStatistics._get_display_limits(
+                values=values,
+                display_percentile=display_percentile,
+            )
+
+            # ======================================================
+            # Сводная статистика
+            # ======================================================
+
+            summary_rows.append(
+                {
+                    "metric": metric_name,
+                    "count": int(values.size),
+                    "mean": mean,
+                    "variance": variance,
+                    "std": std,
+                    "min": minimum,
+                    "p05": float(p05),
+                    "p25": float(p25),
+                    "p50": float(p50),
+                    "p75": float(p75),
+                    "p95": float(p95),
+                    "max": maximum,
+                    "display_percentile": display_percentile,
+                    "display_min": display_min,
+                    "display_max": display_max,
+                }
+            )
+
+            # ======================================================
+            # ECDF
+            # ======================================================
+
+            # Весь массив values передаётся в _build_cdf().
+            #
+            # _build_cdf() использует все значения для сортировки
+            # и расчёта CDF, а bins влияет только на количество
+            # точек для визуализации.
+            x_cdf, y_cdf = CollectStatistics._build_cdf(
+                values=values,
+                bins=bins,
+            )
+
+            # ======================================================
+            # Возможность log X
+            # ======================================================
+
+            strictly_positive = np.all(values > 0.0)
+
+            # ======================================================
+            # Создание figure
+            # ======================================================
+
+            fig, axes = plt.subplots(
+                1,
+                2,
+                figsize=figsize,
+            )
+
+            # ======================================================
+            # Заголовок
+            # ======================================================
+
+            fig.suptitle(
+                metric_name,
+                fontsize=18,
+                fontweight="bold",
+                y=0.98,
+            )
+
+            fig.text(
+                0.5,
+                0.925,
+                (
+                    f"E[X] = {mean:.8g}"
+                    f"    |    "
+                    f"Var[X] = {variance:.8g}"
+                    f"    |    "
+                    f"N = {values.size:,}"
+                    f"    |    "
+                    f"Display = {display_percentile:g}%"
+                ),
+                ha="center",
+                va="center",
+                fontsize=12,
+            )
+
+            # ======================================================
+            # Перцентили
+            #
+            # ВАЖНО:
+            # вычислены по всему исходному массиву.
+            # ======================================================
+
+            percentile_data = (
+                (float(p05), "P5", 0.05, "#1b9e77"),
+                (float(p25), "P25", 0.25, "#d95f02"),
+                (float(p50), "P50", 0.50, "#7570b3"),
+                (float(p75), "P75", 0.75, "#e7298a"),
+                (float(p95), "P95", 0.95, "#66a61e"),
+            )
+
+            # ======================================================
+            # Функция отрисовки
+            # ======================================================
+
             def draw_cdf(
                 ax,
-                x_data,
-                cdf_data,
                 logarithmic_x: bool,
             ) -> None:
+                """
+                Отрисовывает ECDF.
+
+                xlim применяется только после построения полного
+                распределения.
+                """
+
+                # --------------------------------------------------
+                # ECDF
+                # --------------------------------------------------
 
                 ax.plot(
-                    x_data,
-                    cdf_data,
+                    x_cdf,
+                    y_cdf,
                     color="#222222",
                     linewidth=2.0,
                     label="F(x) = P(X ≤ x)",
                 )
 
-                for percentile_value, label, probability, color in percentile_data:
+                # --------------------------------------------------
+                # Перцентили
+                # --------------------------------------------------
+
+                for (
+                    percentile_value,
+                    label,
+                    probability,
+                    color,
+                ) in percentile_data:
+
                     ax.axvline(
                         percentile_value,
                         color=color,
                         linestyle="--",
                         linewidth=1.4,
-                        label=(f"{label} = {percentile_value:.6g}"),
+                        label=(f"{label} = " f"{percentile_value:.6g}"),
                     )
+
+                    # Горизонтальная линия соответствующего
+                    # значения CDF.
                     ax.axhline(
                         probability,
                         color=color,
@@ -636,52 +951,131 @@ class CollectStatistics:
                         alpha=0.7,
                     )
 
-                ax.set_ylim(-0.02, 1.05)
-                ax.set_ylabel("F(x) = P(X ≤ x)", fontsize=11)
-                ax.set_xlabel(metric_name, fontsize=11)
-                ax.grid(True, which="both", alpha=0.25)
-                ax.legend(fontsize=8, loc="lower right")
+                # --------------------------------------------------
+                # Y
+                # --------------------------------------------------
+
+                ax.set_ylim(
+                    -0.02,
+                    1.05,
+                )
+
+                ax.set_ylabel(
+                    "F(x) = P(X ≤ x)",
+                    fontsize=11,
+                )
+
+                ax.set_xlabel(
+                    metric_name,
+                    fontsize=11,
+                )
+
+                # --------------------------------------------------
+                # Главная часть изменения:
+                #
+                # принудительное окно отображения.
+                #
+                # values и x_cdf остаются полными.
+                # --------------------------------------------------
+
+                ax.set_xlim(
+                    display_min,
+                    display_max,
+                )
+
+                # --------------------------------------------------
+                # Сетка
+                # --------------------------------------------------
+
+                ax.grid(
+                    True,
+                    which="both",
+                    alpha=0.25,
+                )
+
+                ax.legend(
+                    fontsize=8,
+                    loc="lower right",
+                )
+
+                # --------------------------------------------------
+                # Масштаб X
+                # --------------------------------------------------
 
                 if logarithmic_x:
-                    ax.set_xscale("log")
-                    ax.set_title(
-                        "Функция распределения — логарифмический масштаб X",
-                        fontsize=13,
+
+                    ax.set_xscale(
+                        "log",
                     )
-                else:
+
                     ax.set_title(
-                        "Функция распределения — линейный масштаб X",
+                        "Функция распределения — " "логарифмический масштаб X",
                         fontsize=13,
                     )
 
-            # ==================================================
-            # Левый график
-            # ==================================================
+                else:
+
+                    ax.set_title(
+                        "Функция распределения — " "линейный масштаб X",
+                        fontsize=13,
+                    )
+
+            # ======================================================
+            # Левый график — линейный
+            # ======================================================
+
             draw_cdf(
                 axes[0],
-                x_cdf,
-                y_cdf,
                 logarithmic_x=False,
             )
 
-            # ==================================================
+            # ======================================================
             # Правый график
-            # ==================================================
-            if strictly_positive:
-                draw_cdf(axes[1], x_cdf, y_cdf, logarithmic_x=True)
-            else:
-                draw_cdf(axes[1], x_cdf, y_cdf, logarithmic_x=False)
+            # ======================================================
 
-                scale = max(abs(p50) * 1e-3, 1e-9)
-                axes[1].set_xscale("symlog", linthresh=scale)
+            if strictly_positive:
+
+                # Для положительных величин используем
+                # настоящий логарифмический X.
+
+                draw_cdf(
+                    axes[1],
+                    logarithmic_x=True,
+                )
+
+            else:
+
+                # Для величин, которые могут быть отрицательными,
+                # обычный log X невозможен.
+                #
+                # Поэтому сначала рисуем обычный ECDF,
+                # устанавливаем xlim, а затем переключаем X
+                # на symmetric log scale.
+
+                draw_cdf(
+                    axes[1],
+                    logarithmic_x=False,
+                )
+
+                scale = max(
+                    abs(p50) * 1e-3,
+                    1e-9,
+                )
+
+                axes[1].set_xscale(
+                    "symlog",
+                    linthresh=scale,
+                )
+
                 axes[1].set_title(
-                    "Функция распределения — симметричный логарифмический масштаб X",
+                    "Функция распределения — " "симметричный логарифмический " "масштаб X",
                     fontsize=13,
                 )
 
-            # ==================================================
+            # ======================================================
             # Отступы
-            # ==================================================
+            # ======================================================
+
             fig.subplots_adjust(
                 left=0.06,
                 right=0.98,
@@ -690,13 +1084,12 @@ class CollectStatistics:
                 wspace=0.17,
             )
 
-            # ==================================================
+            # ======================================================
             # Имя файла
-            # ==================================================
+            # ======================================================
 
             safe_name = (
-                metric_name
-                .replace("/", "_")
+                metric_name.replace("/", "_")
                 .replace("\\", "_")
                 .replace(" ", "_")
                 .replace(":", "_")
@@ -707,11 +1100,12 @@ class CollectStatistics:
                 .replace("|", "_")
             )
 
-            output_path = (output_dir / f"{safe_name}.png")
+            output_path = output_dir / f"{safe_name}.png"
 
-            # ==================================================
+            # ======================================================
             # Сохранение PNG
-            # ==================================================
+            # ======================================================
+
             fig.savefig(
                 output_path,
                 dpi=dpi,
@@ -729,18 +1123,23 @@ class CollectStatistics:
                 f"P5={p05:.8g}; "
                 f"P50={p50:.8g}; "
                 f"P95={p95:.8g}; "
+                f"display={display_min:.8g}..."
+                f"{display_max:.8g}; "
                 f"file={output_path}"
             )
 
-        # ======================================================
-        # Сводная таблица
-        # ======================================================
+        # ==========================================================
+        # Summary
+        # ==========================================================
 
         summary_df = pd.DataFrame(summary_rows)
 
-        summary_path = (output_dir / "summary.csv")
+        summary_path = output_dir / "summary.csv"
 
-        summary_df.to_csv(summary_path, index=False)
+        summary_df.to_csv(
+            summary_path,
+            index=False,
+        )
 
         return summary_df
 
@@ -756,12 +1155,12 @@ if __name__ == "__main__":
 
     df = DataProcessor.load_csv(path)
     df = DataProcessor.pre_filter(df)
-    df = df[120_000: 130_000]  # Ограничение для тестирования на небольшом объёме данных
+    df = df[120_000:130_000]  # Ограничение для тестирования на небольшом объёме данных
     lon, lat, time = DataProcessor.get_lon_lat(df)
     mark = df["status"].to_numpy()
 
-    distances_anomaly, distances_move, distances_stand = (
-        CollectStatistics.collect_distance_between_point(lon, lat, mark)
+    distances_anomaly, distances_move, distances_stand = CollectStatistics.collect_distance_between_point(
+        lon, lat, mark
     )
 
     (
@@ -823,8 +1222,4 @@ if __name__ == "__main__":
     )
 
     print("\nИтоговая статистика:")
-    print(
-        summary.to_string(
-            index=False
-        )
-    )
+    print(summary.to_string(index=False))
