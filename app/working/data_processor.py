@@ -31,24 +31,27 @@ class DataProcessor:
         - Удаляет точки с NULL/NaN в lon или lat.
         """
         mask = df[["lon", "lat"]].isna().any(axis=1).sum()
-        logging.debug("Удалено %d точек с NULL/NaN в lon/lat",mask)
+        logging.debug("Удалено %d точек с NULL/NaN в lon/lat", mask)
         df = df.dropna(subset=["lon", "lat"])
 
         mask = df["sat"] >= 3
-        logging.debug("Удалено %d точек с sat < 3",(~mask).sum())
+        logging.debug("Удалено %d точек с sat < 3", (~mask).sum())
         df = df[mask]
 
         mask = df["is_water"]
-        logging.debug("Удалено %d точек с is_water == False",(~mask).sum(),)
+        logging.debug(
+            "Удалено %d точек с is_water == False",
+            (~mask).sum(),
+        )
         df = df[mask]
         return df
 
     @staticmethod
     def parse_intervals(
-            df: pd.DataFrame,
-            max_point_in_interval: int = 300,
-            min_point_in_interval: int = 10,
-            distance_threshold: float = 500,
+        df: pd.DataFrame,
+        max_point_in_interval: int = 300,
+        min_point_in_interval: int = 10,
+        distance_threshold: float = 500,
     ) -> Tuple[
         List[pd.DataFrame],
         List[pd.DataFrame],
@@ -85,7 +88,7 @@ class DataProcessor:
         if distance_threshold <= 0:
             raise ValueError("distance_threshold должен быть > 0.")
 
-        status_changed = (df["status"].ne(df["status"].shift()))
+        status_changed = df["status"].ne(df["status"].shift())
         interval_ids = status_changed.cumsum()
 
         list_anomaly_df: List[pd.DataFrame] = []
@@ -113,13 +116,13 @@ class DataProcessor:
             if group_size > 1:
                 lat_array = lats
                 lon_array = lons
-                distances = (CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat_array, lon_array))
+                distances = CalculatorDistancesLengthLargeCircle.vectorized_segment_distances(lat_array, lon_array)
                 distances = np.asarray(distances, dtype=float)
-                distance_split = (distances > distance_threshold)
+                distance_split = distances > distance_threshold
             else:
-                distance_split = np.empty(0,dtype=bool)
+                distance_split = np.empty(0, dtype=bool)
 
-            max_points_split = (np.arange(group_size) % max_point_in_interval == 0)
+            max_points_split = np.arange(group_size) % max_point_in_interval == 0
             max_points_split[0] = False
             split_mask = max_points_split.copy()
 

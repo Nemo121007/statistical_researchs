@@ -12,7 +12,7 @@ class KalmanFilterCV:
     def __init__(self, sigma_acc: float = 0.04, sigma_meas: float = 2.4):
         """
         Инициализация фильтра Калмана (модель постоянной скорости).
-        
+
         Args:
             sigma_acc: Стандартное отклонение шума ускорения (процесса).
             sigma_meas: Стандартное отклонение шума измерений.
@@ -24,7 +24,7 @@ class KalmanFilterCV:
     def _get_transition_matrix(dt: float) -> np.ndarray:
         """
         Формирует матрицу перехода состояний (F) для модели с постоянной скоростью.
-        
+
         Args:
             dt: Интервал времени между измерениями (дельта времени).
 
@@ -39,7 +39,7 @@ class KalmanFilterCV:
     def _get_process_noise_matrix(self, dt: float) -> np.ndarray:
         """
         Формирует ковариационную матрицу шума процесса (Q).
-        
+
         Args:
             dt: Интервал времени между измерениями (дельта времени).
 
@@ -64,11 +64,11 @@ class KalmanFilterCV:
         return Q * (self.sigma_acc**2)
 
     def filter(
-            # pylint: disable=too-many-locals
-            self,
-            x: np.ndarray,
-            y: np.ndarray,
-            time: np.ndarray,
+        # pylint: disable=too-many-locals
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        time: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Применяет фильтр Калмана к серии измерений координат.
@@ -105,8 +105,11 @@ class KalmanFilterCV:
             dtype=np.float64,
         )
 
-        R = np.eye(2, dtype=np.float64) * (self.sigma_meas ** 2)
-        I = np.eye(4, dtype=np.float64,)
+        R = np.eye(2, dtype=np.float64) * (self.sigma_meas**2)
+        I = np.eye(
+            4,
+            dtype=np.float64,
+        )
         # ---------------------------------------------------------
         # Инициализация
         # ---------------------------------------------------------
@@ -140,7 +143,7 @@ class KalmanFilterCV:
             # Var(x2 - x1) = 2 * sigma_meas²
             #
             # Var(v) = 2 * sigma_meas² / dt²
-            vel_var = 2.0 * self.sigma_meas ** 2 / dt0 ** 2
+            vel_var = 2.0 * self.sigma_meas**2 / dt0**2
             P[2, 2] = vel_var
             P[3, 3] = vel_var
         else:
@@ -245,7 +248,12 @@ class KalmanFilterCV:
             filtered_x[k] = X_state[0, 0]
             filtered_y[k] = X_state[1, 0]
 
-        return filtered_x, filtered_y, log_likelihood, mahalanobis_sq,
+        return (
+            filtered_x,
+            filtered_y,
+            log_likelihood,
+            mahalanobis_sq,
+        )
 
 
 if __name__ == "__main__":

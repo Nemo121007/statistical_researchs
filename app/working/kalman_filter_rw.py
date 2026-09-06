@@ -3,28 +3,68 @@ from typing import Tuple
 
 import numpy as np
 
-from app.working.data_processor import DataProcessor
-
 
 class KalmanFilterRW:
-    """Класс реализации фильтра Калмана для модели случайного блуждания (без скорости)."""
+    """
+    Фильтр Калмана для модели случайного блуждания.
 
-    def __init__(self, sigma_acc: float = 0.04, sigma_meas: float = 2.4):
+    Состояние:
+        X = [x, y]^T
+
+    Модель перехода:
+        X_k = X_{k-1} + w_k
+
+    Матрица перехода:
+        F = I
+
+    Process noise:
+        Q = sigma_rw^2 * dt * I
+
+    где:
+        sigma_rw — интенсивность случайного блуждания,
+        единицы измерения: м / sqrt(с).
+
+    Measurement noise:
+        R = sigma_meas^2 * I
+
+    где:
+        sigma_meas — СКО шума измерений, м.
+    """
+
+    def __init__(
+        self,
+        sigma_rw: float = 1.0,
+        sigma_meas: float = 2.4,
+    ):
         """
         Инициализация параметров фильтра.
 
         Args:
-            sigma_acc: СКО шума ускорения.
-            sigma_meas: СКО шума измерений.
+            sigma_rw:
+                Интенсивность случайного блуждания,
+                м / sqrt(с).
+
+            sigma_meas:
+                СКО шума измерений, м.
         """
-        self.sigma_acc = sigma_acc
-        self.sigma_meas = sigma_meas
+        if sigma_rw < 0.0:
+            raise ValueError(
+                "sigma_rw должен быть >= 0"
+            )
+
+        if sigma_meas <= 0.0:
+            raise ValueError(
+                "sigma_meas должен быть > 0"
+            )
+
+        self.sigma_rw = float(sigma_rw)
+        self.sigma_meas = float(sigma_meas)
 
     def filter(
-            self,
-            x: np.ndarray,
-            y: np.ndarray,
-            time: np.ndarray,
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        time: np.ndarray,
     ) -> Tuple[
         np.ndarray,
         np.ndarray,
@@ -33,28 +73,128 @@ class KalmanFilterRW:
     ]:
         """
         Применяет фильтр Калмана RW к серии измерений.
-        time содержит np.datetime64.
-        Внутри фильтра dt переводится в секунды.
-        """
-        if not len(x) == len(y) == len(time):
-            raise ValueError("x, y и time должны иметь одинаковую длину")
 
-        x = np.asarray(x, dtype=np.float64)
-        y = np.asarray(y, dtype=np.float64)
-        time = np.asarray(time, dtype="datetime64[ns]")
+        Args:
+            x:
+                Координаты X в локальной декартовой системе, м.
+
+            y:
+                Координаты Y в локальной декартовой системе, м.
+
+            time:
+                Временные метки np.datetime64.
+
+        Returns:
+            filtered_x:
+                Отфильтрованные координаты X.
+
+            filtered_y:
+                Отфильтрованные координаты Y.
+
+            log_likelihood:
+                Логарифм правдоподобия каждого наблюдения.
+
+            mahalanobis_sq:
+                Квадрат расстояния Махаланобиса
+                инновации каждого наблюдения.
+        """
+
+        # ==============================================================
+        # Проверка входных данных
+        # ==============================================================
+
+        if not (
+            len(x)
+            == len(y)
+            == len(time)
+        ):
+            raise ValueError(
+                "x, y и time должны иметь одинаковую длину"
+            )
+
+        x = np.asarray(
+            x,
+            dtype=np.float64,
+        )
+
+        y = np.asarray(
+            y,
+            dtype=np.float64,
+        )
+
+        time = np.asarray(
+            time,
+            dtype="datetime64[ns]",
+        )
+
+        # ==============================================================
+        # Недостаточно точек для одного шага фильтра
+        # ==============================================================
 
         if len(x) < 2:
-            return (x, y, np.full(len(x), np.nan, dtype=np.float64,), np.full(len(x), np.nan, dtype=np.float64))
+            return (
+                x.copy(),
+                y.copy(),
+                np.full(
+                    len(x),
+                    np.nan,
+                    dtype=np.float64,
+                ),
+                np.full(
+                    len(x),
+                    np.nan,
+                    dtype=np.float64,
+                ),
+            )
+
+        # ==============================================================
+        # Размерность состояния
+        # ==============================================================
 
         n_dim = 2
 
-        F = np.eye(n_dim, dtype=np.float64)
+        # ==============================================================
+        # Матрицы модели
+        # ==============================================================
 
-        H = np.eye(n_dim, dtype=np.float64)
+        # RW:
+        #
+        # X_k = X_{k-1} + w_k
+        #
+        # Поэтому F = I.
+        F = np.eye(
+            n_dim,
+            dtype=np.float64,
+        )
 
-        R = (np.eye(n_dim, dtype=np.float64) * self.sigma_meas ** 2)
+        # Измерение непосредственно наблюдает
+        # состояние [x, y].
+        H = np.eye(
+            n_dim,
+            dtype=np.float64,
+        )
 
-        I = np.eye(n_dim, dtype=np.float64)
+        # Единичная матрица.
+        I = np.eye(
+            n_dim,
+            dtype=np.float64,
+        )
+
+        # ==============================================================
+        # Measurement noise
+        # ==============================================================
+
+        R = (
+            np.eye(
+                n_dim,
+                dtype=np.float64,
+            )
+            * self.sigma_meas**2
+        )
+
+        # ==============================================================
+        # Начальное состояние
+        # ==============================================================
 
         X_state = np.array(
             [
@@ -62,119 +202,396 @@ class KalmanFilterRW:
                 y[0],
             ],
             dtype=np.float64,
-        ).reshape(n_dim, 1)
+        ).reshape(
+            n_dim,
+            1,
+        )
 
-        P = np.eye(n_dim, dtype=np.float64) * self.sigma_meas ** 2
+        # Начальная ковариация.
+        P = (
+            np.eye(
+                n_dim,
+                dtype=np.float64,
+            )
+            * self.sigma_meas**2
+        )
 
-        filtered_x = np.zeros(len(x), dtype=np.float64,)
+        # ==============================================================
+        # Результаты
+        # ==============================================================
 
-        filtered_y = np.zeros(len(y), dtype=np.float64)
+        filtered_x = np.empty(
+            len(x),
+            dtype=np.float64,
+        )
+
+        filtered_y = np.empty(
+            len(y),
+            dtype=np.float64,
+        )
 
         filtered_x[0] = x[0]
         filtered_y[0] = y[0]
-        log_likelihood = np.full(len(x), np.nan, dtype=np.float64)
-        mahalanobis_sq = np.full(len(x), np.nan, dtype=np.float64)
 
-        log_2pi = np.log(2.0 * np.pi)
-        dim = 2
+        log_likelihood = np.full(
+            len(x),
+            np.nan,
+            dtype=np.float64,
+        )
 
-        for k in range(1, len(time)):
-            # np.datetime64 -> секунды
-            dt = (time[k] - time[k - 1]) / np.timedelta64(1, "s")
+        mahalanobis_sq = np.full(
+            len(x),
+            np.nan,
+            dtype=np.float64,
+        )
+
+        log_2pi = np.log(
+            2.0 * np.pi
+        )
+
+        dim = n_dim
+
+        # ==============================================================
+        # Основной цикл фильтра
+        # ==============================================================
+
+        for k in range(
+            1,
+            len(time),
+        ):
+            # ----------------------------------------------------------
+            # Интервал времени в секундах
+            # ----------------------------------------------------------
+
+            dt = (
+                time[k]
+                - time[k - 1]
+            ) / np.timedelta64(
+                1,
+                "s",
+            )
+
             dt = float(dt)
-            if dt <= 0.0:
-                dt = 0.0
 
-            # Шум процесса RW.
-            Q = np.eye(n_dim, dtype=np.float64) * (self.sigma_acc ** 2 * dt)
+            if dt < 0.0:
+                raise ValueError(
+                    "time должен быть "
+                    "монотонно неубывающим"
+                )
 
-            # Prediction.
-            X_pred = F @ X_state
-            P_pred = P + Q
+            # ----------------------------------------------------------
+            # Process noise
+            #
+            # Q = sigma_rw^2 * dt * I
+            # ----------------------------------------------------------
 
-            # Measurement.
+            Q = (
+                np.eye(
+                    n_dim,
+                    dtype=np.float64,
+                )
+                * (
+                    self.sigma_rw**2
+                    * dt
+                )
+            )
+
+            # ----------------------------------------------------------
+            # Prediction
+            #
+            # X_pred = F X
+            #
+            # P_pred = F P F^T + Q
+            # ----------------------------------------------------------
+
+            X_pred = (
+                F @ X_state
+            )
+
+            P_pred = (
+                F
+                @ P
+                @ F.T
+                + Q
+            )
+
+            # ----------------------------------------------------------
+            # Текущее измерение
+            # ----------------------------------------------------------
+
             z = np.array(
                 [
                     x[k],
                     y[k],
                 ],
                 dtype=np.float64,
-            ).reshape(n_dim, 1)
+            ).reshape(
+                n_dim,
+                1,
+            )
 
-            # Innovation.
-            innovation = z - H @ X_pred
+            # ----------------------------------------------------------
+            # Innovation
+            #
+            # ν = z - H X_pred
+            # ----------------------------------------------------------
 
-            # Innovation covariance.
-            S = H @ P_pred @ H.T + R
+            innovation = (
+                z
+                - H @ X_pred
+            )
 
-            S = 0.5 * (S + S.T)
+            # ----------------------------------------------------------
+            # Innovation covariance
+            #
+            # S = H P_pred H^T + R
+            # ----------------------------------------------------------
 
-            # Log-likelihood и Mahalanobis².
-            sign, logdet = np.linalg.slogdet(S)
+            S = (
+                H
+                @ P_pred
+                @ H.T
+                + R
+            )
 
-            if sign > 0.0 and np.isfinite(logdet):
-                try:
-                    solved_innovation = np.linalg.solve(S, innovation)
-                    mahalanobis_dist = float((innovation.T @ solved_innovation).item())
+            # Защита от небольшой численной
+            # асимметрии.
+            S = 0.5 * (
+                S + S.T
+            )
 
-                    if mahalanobis_dist >= 0.0:
-                        mahalanobis_sq[k] = mahalanobis_dist
-                        log_likelihood[k] = -0.5 * (dim * log_2pi + logdet + mahalanobis_dist)
-                    else:
-                        # Теоретически такого быть не должно
-                        # для корректной S.
-                        solved_innovation = np.linalg.pinv(S) @ innovation
-                except np.linalg.LinAlgError:
-                    solved_innovation = (np.linalg.pinv(S) @ innovation)
-            else:
-                solved_innovation = (np.linalg.pinv(S)@ innovation)
+            # ----------------------------------------------------------
+            # Проверка S
+            # ----------------------------------------------------------
 
-            # Kalman Gain.
-            K = np.linalg.solve(S, H @ P_pred,).T
+            sign, logdet = (
+                np.linalg.slogdet(S)
+            )
 
-            # State update.
-            X_state = (X_pred + K @ innovation)
+            if (
+                sign <= 0.0
+                or not np.isfinite(logdet)
+            ):
+                raise np.linalg.LinAlgError(
+                    "Матрица S не является "
+                    "положительно определённой"
+                )
 
-            # Joseph form.
-            I_KH = I - K @ H
-            P = I_KH @ P_pred @ I_KH.T + K @ R @ K.T
-            P = 0.5 * P + P.T
+            # ----------------------------------------------------------
+            # Решение:
+            #
+            # S * S^-1 innovation = innovation
+            #
+            # Без явного вычисления inv(S).
+            # ----------------------------------------------------------
 
-            filtered_x[k] = X_state[0, 0]
-            filtered_y[k] = X_state[1, 0]
+            try:
+                solved_innovation = (
+                    np.linalg.solve(
+                        S,
+                        innovation,
+                    )
+                )
+            except np.linalg.LinAlgError as exc:
+                raise np.linalg.LinAlgError(
+                    "Не удалось решить систему "
+                    "S * x = innovation"
+                ) from exc
 
-        return filtered_x, filtered_y, log_likelihood, mahalanobis_sq
+            # ----------------------------------------------------------
+            # Mahalanobis^2
+            #
+            # M² = ν^T S^-1 ν
+            # ----------------------------------------------------------
+
+            mahalanobis_dist = float(
+                (
+                    innovation.T
+                    @ solved_innovation
+                ).item()
+            )
+
+            # Защита от отрицательной
+            # численной погрешности.
+            mahalanobis_dist = max(
+                mahalanobis_dist,
+                0.0,
+            )
+
+            mahalanobis_sq[k] = (
+                mahalanobis_dist
+            )
+
+            # ----------------------------------------------------------
+            # Log-likelihood
+            #
+            # log p(z_k | z_1...z_{k-1})
+            #
+            # = -1/2 * (
+            #       d log(2π)
+            #       + log det(S)
+            #       + M²
+            #   )
+            # ----------------------------------------------------------
+
+            log_likelihood[k] = (
+                -0.5
+                * (
+                    dim * log_2pi
+                    + logdet
+                    + mahalanobis_dist
+                )
+            )
+
+            # ----------------------------------------------------------
+            # Kalman Gain
+            #
+            # K = P_pred H^T S^-1
+            #
+            # Снова не вычисляем inv(S).
+            # ----------------------------------------------------------
+
+            try:
+                K = np.linalg.solve(
+                    S,
+                    H @ P_pred,
+                ).T
+            except np.linalg.LinAlgError as exc:
+                raise np.linalg.LinAlgError(
+                    "Не удалось вычислить "
+                    "Kalman Gain"
+                ) from exc
+
+            # ----------------------------------------------------------
+            # State update
+            #
+            # X = X_pred + K ν
+            # ----------------------------------------------------------
+
+            X_state = (
+                X_pred
+                + K @ innovation
+            )
+
+            # ----------------------------------------------------------
+            # Joseph form
+            #
+            # P =
+            #   (I-KH) P_pred (I-KH)^T
+            #   + K R K^T
+            #
+            # Такая форма лучше сохраняет
+            # положительную полуопределённость
+            # ковариационной матрицы.
+            # ----------------------------------------------------------
+
+            I_KH = (
+                I
+                - K @ H
+            )
+
+            P = (
+                I_KH
+                @ P_pred
+                @ I_KH.T
+                + K
+                @ R
+                @ K.T
+            )
+
+            # Симметризация.
+            P = 0.5 * (
+                P + P.T
+            )
+
+            # ----------------------------------------------------------
+            # Сохранение результата
+            # ----------------------------------------------------------
+
+            filtered_x[k] = (
+                X_state[0, 0]
+            )
+
+            filtered_y[k] = (
+                X_state[1, 0]
+            )
+
+        return (
+            filtered_x,
+            filtered_y,
+            log_likelihood,
+            mahalanobis_sq,
+        )
 
 
 if __name__ == "__main__":
-    # Определение путей
-    project_root = Path(__file__).parent.parent.parent
-    data_path = project_root / "data" / "post_processing" / "example.csv"
+    # ==============================================================
+    # Пример создания фильтра
+    # ==============================================================
 
-    # Директории для сохранения картинок
-    pict_dir = project_root / "data" / "pict"
-    true_dir = pict_dir / "true"
-    false_dir = pict_dir / "false"
+    project_root = (
+        Path(__file__)
+        .parent
+        .parent
+        .parent
+    )
 
-    # Инициализация директорий
-    true_dir.mkdir(parents=True, exist_ok=True)
-    false_dir.mkdir(parents=True, exist_ok=True)
+    data_path = (
+        project_root
+        / "data"
+        / "post_processing"
+        / "example.csv"
+    )
 
-    # Инициализация классов
-    processor = DataProcessor()
+    pict_dir = (
+        project_root
+        / "data"
+        / "pict"
+    )
 
-    # Параметры фильтра идентичны для обоих списков, поэтому создаем один экземпляр
-    # (метод filter сбрасывает состояние внутри себя)
-    kf = KalmanFilterRW(sigma_acc=0.0001 * 0.04, sigma_meas=1 * 2.4)
+    true_dir = (
+        pict_dir
+        / "true"
+    )
 
-    # Загрузка и парсинг
-    df = processor.load_csv(data_path)
-    list_valid_df, list_invalid_df = processor.parse_intervals(df)
+    false_dir = (
+        pict_dir
+        / "false"
+    )
 
-    # Обработка валидных интервалов
-    processor.process_track_list(list_valid_df, true_dir, processor, kf, "валидных интервалов")
+    true_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    # Обработка невалидных интервалов
-    processor.process_track_list(list_invalid_df, false_dir, processor, kf, "невалидных интервалов")
+    false_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    print("Готово.")
+    # ==============================================================
+    # Инициализация RW-фильтра
+    #
+    # sigma_rw:
+    #     м / sqrt(с)
+    #
+    # sigma_meas:
+    #     м
+    # ==============================================================
+
+    kf = KalmanFilterRW(
+        sigma_rw=0.0001 * 0.04,
+        sigma_meas=1 * 2.4,
+    )
+
+    print(
+        "KalmanFilterRW initialized:"
+    )
+
+    print(
+        f"  sigma_rw   = {kf.sigma_rw}"
+    )
+
+    print(
+        f"  sigma_meas = {kf.sigma_meas}"
+    )

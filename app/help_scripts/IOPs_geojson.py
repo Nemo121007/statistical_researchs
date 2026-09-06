@@ -94,7 +94,9 @@ class IOPs_geojson:
     #         raise
 
     @staticmethod
-    def write_geojson_from_arrays(output_path: Path, list_arrays: List[Tuple[np.ndarray, np.ndarray, np.ndarray]]) -> None:
+    def write_geojson_from_arrays(
+        output_path: Path, list_arrays: List[Tuple[np.ndarray, np.ndarray, np.ndarray]]
+    ) -> None:
         """Записывает данные в GeoJSON файл из списков массивов времени(time), широты(lat) и долготы(lon).
         Args:
             output_path: Путь к выходному файлу.

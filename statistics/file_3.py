@@ -1,5 +1,6 @@
 """
-Калибровка параметров фильтров Калмана CV и RW.
+Калибровка параметров Kalman CV/RW перед переходом к классификации
+аномальных GPS-точек.
 
 Обучающие эксперименты:
     1.csv
@@ -8,59 +9,49 @@
 Валидационный эксперимент:
     3.csv
 
-ВАЖНО:
+Основная цель этого скрипта:
+    получить устойчивые параметры sigma_meas, sigma_acc и sigma_rw,
+    которые затем будут использоваться для основной задачи
+    классификации аномальных точек.
 
-1. 1.csv и 2.csv являются независимыми обучающими экспериментами.
+Изменения относительно предыдущей версии:
 
-2. 3.csv НЕ используется при подборе параметров.
+1. SIGMA_RW_MAX увеличен до 100.0.
 
-3. sigma_meas оценивается отдельным этапом:
-       - только из stand;
-       - stand разбивается на локальные неперекрывающиеся фрагменты;
-       - отбираются локально-стационарные фрагменты;
-       - sigma_meas оценивается по приращениям координат.
+2. Validation дополнительно классифицируется по двум независимым
+   направлениям:
 
-4. После оценки sigma_meas она ФИКСИРУЕТСЯ.
+       central_calibration
+       tail_calibration
 
-5. MLE CV оптимизирует только:
-       sigma_acc
+   Вместо единственной грубой оценки POOR.
 
-6. MLE RW оптимизирует только:
-       sigma_rw
+3. sigma_meas рассчитывается для трёх размеров локального
+   stationary-фрагмента:
 
-7. Для MLE используются неперекрывающиеся окна:
+       20
+       30
+       60
 
-       P[0] ... P[WINDOW]
-       P[WINDOW + 1] ... P[2*WINDOW + 1]
-       ...
+   В CSV сохраняются:
+       sigma_meas(fragment=20)
+       sigma_meas(fragment=30)
+       sigma_meas(fragment=60)
 
-8. Для итоговой статистики используются все локальные окна
-   с шагом 1:
+   и итоговая оценка устойчивости.
 
-       P[i-WINDOW] ... P[i]
+Важно:
 
-9. Для validation рассчитываются:
+    sigma_meas после оценки НЕ оптимизируется совместно
+    с sigma_acc/sigma_rw.
 
-       mean(M²)
-       median(M²)
-       P95(M²)
-       P99(M²)
-       доля M² > 5.991
-       доля M² > 9.21
-       доля M² > 13.82
+Для CV оптимизируется только:
 
-10. Для двумерной Gaussian-инновации теоретически:
+    sigma_acc
 
-       M² ~ chi2(df=2)
+Для RW оптимизируется только:
 
-   поэтому:
-
-       E[M²]       = 2
-       P95[M²]     = 5.991
-       P99[M²]     = 9.210
-       P99.9[M²]   = 13.816
-
-11. DataProcessor не изменяется.
+    sigma_rw
 """
 
 from __future__ import annotations
@@ -85,59 +76,37 @@ from app.working.data_processor import DataProcessor
 
 MIN_SEGMENT_LENGTH = 100
 
-# Локальное окно Kalman:
-#
-# P[i-WINDOW] ... P[i]
-#
-# При WINDOW=10 окно содержит 11 точек.
 WINDOW = 10
 
+# Для MLE используются неперекрывающиеся окна.
+MLE_STRIDE = WINDOW + 1
+
+BATCH_SIZE = 4096
+
 # ------------------------------------------------------------
-# Настройки локально-стационарных stand-фрагментов
+# sigma_meas
 # ------------------------------------------------------------
 
-# При типичном шаге 10 секунд:
-#
-# 30 точек ~= 5 минут.
-#
-# Фрагменты НЕ перекрываются.
-STATIONARY_FRAGMENT_LENGTH = 30
+STATIONARY_FRAGMENT_LENGTHS = (
+    20,
+    30,
+    60,
+)
 
-# Минимальный размер фрагмента.
-STATIONARY_MIN_POINTS = 20
+STATIONARY_MIN_POINTS = 10
 
-# Насколько сильно средний шаг может отличаться от нуля.
-#
-# Проверяется отдельно для X и Y:
-#
-#     |mean(diff)| <= Z * sigma_diff / sqrt(N)
-#
-# При Z=3 допускается 3-sigma отклонение.
 STATIONARITY_Z = 3.0
 
-# Локальная оценка sigma фрагмента должна находиться
-# в разумном диапазоне относительно медианы по всем фрагментам.
-#
-# Это защищает от поврежденных участков GPS.
 STATIONARY_SIGMA_MIN_FACTOR = 0.25
 STATIONARY_SIGMA_MAX_FACTOR = 4.0
 
-# Проверка временного шага внутри фрагмента.
-#
-# Например, при обычном dt=10 секунд значение 2.0
-# допускает максимум около 20 секунд.
 STATIONARY_MAX_DT_RATIO = 2.0
 
-# Минимальное число отобранных stationarity-фрагментов.
 STATIONARY_MIN_ACCEPTED_FRAGMENTS = 3
 
 # ------------------------------------------------------------
 # MLE
 # ------------------------------------------------------------
-
-MLE_STRIDE = WINDOW + 1
-
-BATCH_SIZE = 4096
 
 OPTIMIZER_MAXITER = 100
 OPTIMIZER_XTOL = 1e-4
@@ -149,38 +118,41 @@ SIGMA_MEAS_MAX = 1000.0
 SIGMA_ACC_MIN = 1e-7
 SIGMA_ACC_MAX = 10.0
 
+# ВАЖНО:
+# увеличено с 10 до 100.
 SIGMA_RW_MIN = 1e-7
 SIGMA_RW_MAX = 100.0
 
 DEFAULT_SIGMA_ACC_INITIAL = 0.04
-
 DEFAULT_SIGMA_RW_INITIAL = 1.0
 
 # ------------------------------------------------------------
 # Mahalanobis
 # ------------------------------------------------------------
 
-MAHALANOBIS_P95_THEORETICAL = float(
+MAHALANOBIS_P95_THRESHOLD = float(
     chi2.ppf(0.95, df=2)
 )
 
-MAHALANOBIS_P99_THEORETICAL = float(
+MAHALANOBIS_P99_THRESHOLD = float(
     chi2.ppf(0.99, df=2)
 )
 
-MAHALANOBIS_P999_THEORETICAL = float(
+MAHALANOBIS_P999_THRESHOLD = float(
     chi2.ppf(0.999, df=2)
 )
 
-MAHALANOBIS_THRESHOLD_P95 = MAHALANOBIS_P95_THEORETICAL
-MAHALANOBIS_THRESHOLD_P99 = MAHALANOBIS_P99_THEORETICAL
-MAHALANOBIS_THRESHOLD_P999 = MAHALANOBIS_P999_THEORETICAL
+THEORETICAL_MEDIAN_MAHALANOBIS = float(
+    chi2.ppf(0.50, df=2)
+)
 
-OUTPUT_FILENAME = "file_3_kalman_parameter_estimates.csv"
+OUTPUT_FILENAME = (
+    "kalman_parameter_estimates.csv"
+)
 
 
 # ============================================================
-# Segment
+# Track segment
 # ============================================================
 
 @dataclass
@@ -198,7 +170,7 @@ class TrackSegment:
 
 
 # ============================================================
-# Подготовленный segment
+# Prepared segment
 # ============================================================
 
 @dataclass
@@ -252,7 +224,7 @@ class PreparedSegment:
                 f"{segment.file_name} / "
                 f"{segment.segment_type} / "
                 f"segment={segment.segment_id}: "
-                "обнаружены некорректные значения time"
+                "обнаружены некорректные time"
             )
 
         if not np.all(np.isfinite(lon)):
@@ -307,12 +279,12 @@ class PreparedSegment:
 
 
 # ============================================================
-# Локально-стационарный фрагмент
+# Stationary fragment
 # ============================================================
 
 @dataclass
 class StationaryFragment:
-    """Локальный фрагмент stand для оценки sigma_meas."""
+    """Локальный stand-фрагмент."""
 
     file_name: str
     segment_id: int
@@ -340,10 +312,10 @@ class StationaryFragment:
 # ============================================================
 
 class KalmanParameterEstimator:
-    """Калибровка параметров Kalman CV и RW."""
+    """Калибровка параметров Kalman CV/RW."""
 
     # ========================================================
-    # Извлечение сегментов
+    # Segments
     # ========================================================
 
     @staticmethod
@@ -435,8 +407,13 @@ class KalmanParameterEstimator:
             & ~np.r_[mask[1:], False]
         )
 
-        start_indices = np.flatnonzero(starts)
-        end_indices = np.flatnonzero(ends)
+        start_indices = np.flatnonzero(
+            starts
+        )
+
+        end_indices = np.flatnonzero(
+            ends
+        )
 
         segments: list[TrackSegment] = []
 
@@ -463,14 +440,14 @@ class KalmanParameterEstimator:
         return segments
 
     # ========================================================
-    # Подготовка
+    # Prepare
     # ========================================================
 
     @staticmethod
     def prepare_segments(
         segments: Iterable[TrackSegment],
     ) -> list[PreparedSegment]:
-        """Преобразует DataFrame в NumPy-представление."""
+        """Преобразует DataFrame в NumPy."""
 
         result: list[PreparedSegment] = []
 
@@ -487,7 +464,7 @@ class KalmanParameterEstimator:
         return result
 
     # ========================================================
-    # Локальная система координат
+    # Coordinates
     # ========================================================
 
     @staticmethod
@@ -497,12 +474,7 @@ class KalmanParameterEstimator:
         NDArray[np.float64],
         NDArray[np.float64],
     ]:
-        """
-        Локальная система координат.
-
-        Каждый переданный DataFrame получает собственное начало
-        координат через DataProcessor.
-        """
+        """Переводит DataFrame из lon/lat в локальные X/Y."""
 
         lon = df["lon"].to_numpy(
             dtype=np.float64
@@ -525,7 +497,7 @@ class KalmanParameterEstimator:
         NDArray[np.float64],
         NDArray[np.float64],
     ]:
-        """Локальные X/Y для NumPy-массива."""
+        """Локальные X/Y относительно первой точки."""
 
         if len(lon) == 0:
             return (
@@ -544,7 +516,9 @@ class KalmanParameterEstimator:
 
         kx = (
             DataProcessor.LEN_LAT
-            * np.cos(np.radians(lat0))
+            * np.cos(
+                np.radians(lat0)
+            )
         )
 
         x = (
@@ -561,18 +535,16 @@ class KalmanParameterEstimator:
         )
 
     # ========================================================
-    # Построение локальных stand-фрагментов
+    # Stationary fragments
     # ========================================================
 
     @staticmethod
     def build_stationary_fragments(
         segments: Iterable[TrackSegment],
-        fragment_length: int = STATIONARY_FRAGMENT_LENGTH,
+        fragment_length: int,
     ) -> list[StationaryFragment]:
         """
-        Разбивает stand-сегменты на неперекрывающиеся локальные фрагменты.
-
-        Каждый фрагмент имеет собственную локальную систему координат.
+        Разбивает stand-сегменты на неперекрывающиеся фрагменты.
         """
 
         fragments: list[StationaryFragment] = []
@@ -611,14 +583,21 @@ class KalmanParameterEstimator:
                     n,
                 )
 
-                if end - start < STATIONARY_MIN_POINTS:
+                current_size = end - start
+
+                if (
+                    current_size
+                    < STATIONARY_MIN_POINTS
+                ):
                     continue
 
                 fragment_lon = lon[start:end]
                 fragment_lat = lat[start:end]
                 fragment_time = time[start:end]
 
-                if np.any(np.isnat(fragment_time)):
+                if np.any(
+                    np.isnat(fragment_time)
+                ):
                     continue
 
                 x, y = (
@@ -637,19 +616,12 @@ class KalmanParameterEstimator:
                     / np.timedelta64(1, "s")
                 ).astype(np.float64)
 
-                valid_dt = (
-                    np.isfinite(dt)
-                    & (dt > 0.0)
-                )
-
-                if np.count_nonzero(valid_dt) < 3:
-                    continue
-
                 dx = np.diff(x)
                 dy = np.diff(y)
 
                 valid = (
-                    valid_dt
+                    np.isfinite(dt)
+                    & (dt > 0.0)
                     & np.isfinite(dx)
                     & np.isfinite(dy)
                 )
@@ -676,19 +648,19 @@ class KalmanParameterEstimator:
                 )
 
                 sigma_x = np.sqrt(
-                    max(var_dx, 0.0) / 2.0
+                    max(
+                        var_dx,
+                        0.0,
+                    )
+                    / 2.0
                 )
 
                 sigma_y = np.sqrt(
-                    max(var_dy, 0.0) / 2.0
-                )
-
-                mean_dx = float(
-                    np.mean(dx)
-                )
-
-                mean_dy = float(
-                    np.mean(dy)
+                    max(
+                        var_dy,
+                        0.0,
+                    )
+                    / 2.0
                 )
 
                 fragments.append(
@@ -699,10 +671,18 @@ class KalmanParameterEstimator:
                         x=x,
                         y=y,
                         dt=dt_valid,
-                        sigma_x=float(sigma_x),
-                        sigma_y=float(sigma_y),
-                        mean_dx=mean_dx,
-                        mean_dy=mean_dy,
+                        sigma_x=float(
+                            sigma_x
+                        ),
+                        sigma_y=float(
+                            sigma_y
+                        ),
+                        mean_dx=float(
+                            np.mean(dx)
+                        ),
+                        mean_dy=float(
+                            np.mean(dy)
+                        ),
                         var_dx=var_dx,
                         var_dy=var_dy,
                     )
@@ -713,7 +693,7 @@ class KalmanParameterEstimator:
         return fragments
 
     # ========================================================
-    # Отбор локально-стационарных фрагментов
+    # Stationary selection
     # ========================================================
 
     @staticmethod
@@ -721,28 +701,19 @@ class KalmanParameterEstimator:
         fragments: list[StationaryFragment],
     ) -> tuple[
         list[StationaryFragment],
-        dict[str, float],
+        dict[str, float | int],
     ]:
-        """
-        Отбирает локально-стационарные фрагменты.
-
-        Критерии:
-
-        1. Локальное sigma не должно быть аномально большим
-           или малым относительно медианы.
-
-        2. Среднее приращение X и Y не должно статистически
-           отличаться от нуля.
-
-        3. Временной шаг не должен содержать слишком большие
-           разрывы.
-        """
+        """Отбирает локально-стационарные фрагменты."""
 
         valid_fragments = [
             fragment
             for fragment in fragments
-            if np.isfinite(fragment.sigma_x)
-            and np.isfinite(fragment.sigma_y)
+            if np.isfinite(
+                fragment.sigma_x
+            )
+            and np.isfinite(
+                fragment.sigma_y
+            )
             and fragment.sigma_x >= 0.0
             and fragment.sigma_y >= 0.0
         ]
@@ -752,6 +723,9 @@ class KalmanParameterEstimator:
                 "median_sigma_x": np.nan,
                 "median_sigma_y": np.nan,
                 "median_dt": np.nan,
+                "total_fragments": 0,
+                "valid_fragments": 0,
+                "accepted_fragments": 0,
             }
 
         sigma_x_values = np.array(
@@ -782,19 +756,24 @@ class KalmanParameterEstimator:
             )
         )
 
-        dt_values = np.concatenate(
-            [
-                fragment.dt
-                for fragment in valid_fragments
-                if len(fragment.dt) > 0
-            ]
-        )
+        dt_arrays = [
+            fragment.dt
+            for fragment in valid_fragments
+            if len(fragment.dt) > 0
+        ]
 
-        median_dt = float(
-            np.median(
-                dt_values
+        if dt_arrays:
+            dt_values = np.concatenate(
+                dt_arrays
             )
-        ) if len(dt_values) else np.nan
+
+            median_dt = float(
+                np.median(
+                    dt_values
+                )
+            )
+        else:
+            median_dt = np.nan
 
         robust_diff_sigma_x = (
             median_sigma_x
@@ -832,52 +811,50 @@ class KalmanParameterEstimator:
             reasons: list[str] = []
 
             # ------------------------------------------------
-            # Разброс X
+            # sigma X
             # ------------------------------------------------
 
             if (
-                np.isfinite(median_sigma_x)
-                and median_sigma_x > 0.0
-            ):
-                if not (
+                median_sigma_x > 0.0
+                and not (
                     min_sigma_x
                     <= fragment.sigma_x
                     <= max_sigma_x
-                ):
-                    reasons.append(
-                        "sigma_x_outlier"
-                    )
+                )
+            ):
+                reasons.append(
+                    "sigma_x_outlier"
+                )
 
             # ------------------------------------------------
-            # Разброс Y
+            # sigma Y
             # ------------------------------------------------
 
             if (
-                np.isfinite(median_sigma_y)
-                and median_sigma_y > 0.0
-            ):
-                if not (
+                median_sigma_y > 0.0
+                and not (
                     min_sigma_y
                     <= fragment.sigma_y
                     <= max_sigma_y
-                ):
-                    reasons.append(
-                        "sigma_y_outlier"
-                    )
+                )
+            ):
+                reasons.append(
+                    "sigma_y_outlier"
+                )
 
             # ------------------------------------------------
-            # Локальный дрейф X
+            # drift X
             # ------------------------------------------------
 
-            n_diff = len(fragment.dt)
+            n = len(fragment.dt)
 
             if (
                 robust_diff_sigma_x > 0.0
-                and n_diff > 1
+                and n > 1
             ):
                 se_mean_dx = (
                     robust_diff_sigma_x
-                    / np.sqrt(n_diff)
+                    / np.sqrt(n)
                 )
 
                 if (
@@ -890,16 +867,16 @@ class KalmanParameterEstimator:
                     )
 
             # ------------------------------------------------
-            # Локальный дрейф Y
+            # drift Y
             # ------------------------------------------------
 
             if (
                 robust_diff_sigma_y > 0.0
-                and n_diff > 1
+                and n > 1
             ):
                 se_mean_dy = (
                     robust_diff_sigma_y
-                    / np.sqrt(n_diff)
+                    / np.sqrt(n)
                 )
 
                 if (
@@ -912,7 +889,7 @@ class KalmanParameterEstimator:
                     )
 
             # ------------------------------------------------
-            # Большой временной gap
+            # dt
             # ------------------------------------------------
 
             if (
@@ -957,61 +934,45 @@ class KalmanParameterEstimator:
             else:
                 fragment.accepted = True
                 fragment.reject_reason = ""
-                accepted.append(fragment)
+                accepted.append(
+                    fragment
+                )
 
-        statistics = {
+        return accepted, {
             "median_sigma_x": median_sigma_x,
             "median_sigma_y": median_sigma_y,
             "median_dt": median_dt,
-            "total_fragments": len(fragments),
-            "valid_fragments": len(valid_fragments),
-            "accepted_fragments": len(accepted),
+            "total_fragments": len(
+                fragments
+            ),
+            "valid_fragments": len(
+                valid_fragments
+            ),
+            "accepted_fragments": len(
+                accepted
+            ),
         }
 
-        return accepted, statistics
-
     # ========================================================
-    # Оценка sigma_meas
+    # Оценка sigma_meas для одного размера фрагмента
     # ========================================================
 
     @staticmethod
-    def estimate_sigma_meas(
+    def estimate_sigma_meas_for_fragment_length(
         segments: Iterable[TrackSegment],
+        fragment_length: int,
     ) -> dict[str, float | int | str]:
-        """
-        Оценивает sigma_meas только по локально-стационарным
-        stand-фрагментам.
-
-        Для measurement noise:
-
-            z_i = true_position + epsilon_i
-
-        При независимом noise:
-
-            diff(z_i) = epsilon_i - epsilon_(i-1)
-
-        поэтому:
-
-            Var(diff) = 2 * sigma_meas²
-
-        и:
-
-            sigma_meas = sqrt(Var(diff) / 2)
-
-        Для итоговой оценки используется pooled within-fragment
-        variance, то есть локальный средний drift не попадает
-        напрямую в оценку дисперсии.
-        """
+        """Оценивает sigma_meas для одного размера фрагмента."""
 
         fragments = (
             KalmanParameterEstimator
             .build_stationary_fragments(
                 segments=segments,
-                fragment_length=STATIONARY_FRAGMENT_LENGTH,
+                fragment_length=fragment_length,
             )
         )
 
-        accepted, fragment_stats = (
+        accepted, statistics = (
             KalmanParameterEstimator
             .select_stationary_fragments(
                 fragments
@@ -1022,31 +983,33 @@ class KalmanParameterEstimator:
             len(accepted)
             < STATIONARY_MIN_ACCEPTED_FRAGMENTS
         ):
-            logging.warning(
-                "Недостаточно локально-стационарных "
-                "stand-фрагментов: %d",
-                len(accepted),
-            )
-
             return {
                 "sigma_meas_x": np.nan,
                 "sigma_meas_y": np.nan,
                 "sigma_meas": np.nan,
-                "fragment_count_total": int(
-                    len(fragments)
+                "fragment_length": fragment_length,
+                "fragment_count_total": len(
+                    fragments
                 ),
-                "fragment_count_accepted": int(
-                    len(accepted)
+                "fragment_count_accepted": len(
+                    accepted
                 ),
                 "point_count": 0,
+                "median_sigma_x": statistics[
+                    "median_sigma_x"
+                ],
+                "median_sigma_y": statistics[
+                    "median_sigma_y"
+                ],
+                "median_dt": statistics[
+                    "median_dt"
+                ],
                 "status": "INSUFFICIENT_FRAGMENTS",
             }
 
-        weighted_var_x = 0.0
-        weighted_var_y = 0.0
-
-        weight_total_x = 0
-        weight_total_y = 0
+        sum_var_x = 0.0
+        sum_var_y = 0.0
+        total_weight = 0
 
         for fragment in accepted:
             n = len(
@@ -1056,57 +1019,65 @@ class KalmanParameterEstimator:
             if n < 2:
                 continue
 
-            weighted_var_x += (
-                (n - 1)
+            weight = n - 1
+
+            sum_var_x += (
+                weight
                 * fragment.var_dx
             )
 
-            weighted_var_y += (
-                (n - 1)
+            sum_var_y += (
+                weight
                 * fragment.var_dy
             )
 
-            weight_total_x += n - 1
-            weight_total_y += n - 1
+            total_weight += weight
 
-        if (
-            weight_total_x == 0
-            or weight_total_y == 0
-        ):
+        if total_weight == 0:
             return {
                 "sigma_meas_x": np.nan,
                 "sigma_meas_y": np.nan,
                 "sigma_meas": np.nan,
-                "fragment_count_total": int(
-                    len(fragments)
+                "fragment_length": fragment_length,
+                "fragment_count_total": len(
+                    fragments
                 ),
-                "fragment_count_accepted": int(
-                    len(accepted)
+                "fragment_count_accepted": len(
+                    accepted
                 ),
                 "point_count": 0,
+                "median_sigma_x": statistics[
+                    "median_sigma_x"
+                ],
+                "median_sigma_y": statistics[
+                    "median_sigma_y"
+                ],
+                "median_dt": statistics[
+                    "median_dt"
+                ],
                 "status": "NO_VARIANCE_DATA",
             }
 
-        pooled_var_dx = (
-            weighted_var_x
-            / weight_total_x
+        pooled_var_x = (
+            sum_var_x
+            / total_weight
         )
 
-        pooled_var_dy = (
-            weighted_var_y
-            / weight_total_y
+        pooled_var_y = (
+            sum_var_y
+            / total_weight
         )
 
         sigma_meas_x = np.sqrt(
             max(
-                pooled_var_dx / 2.0,
+                pooled_var_x / 2.0,
                 0.0,
             )
         )
 
         sigma_meas_y = np.sqrt(
             max(
-                pooled_var_dy / 2.0,
+                pooled_var_y / 2.0,
                 0.0,
             )
         )
@@ -1124,20 +1095,6 @@ class KalmanParameterEstimator:
             for fragment in accepted
         )
 
-        logging.info(
-            "sigma_meas: "
-            "total_fragments=%d, "
-            "accepted=%d, "
-            "sigma_x=%.8g, "
-            "sigma_y=%.8g, "
-            "sigma=%.8g",
-            len(fragments),
-            len(accepted),
-            sigma_meas_x,
-            sigma_meas_y,
-            sigma_meas,
-        )
-
         return {
             "sigma_meas_x": float(
                 sigma_meas_x
@@ -1148,29 +1105,217 @@ class KalmanParameterEstimator:
             "sigma_meas": float(
                 sigma_meas
             ),
-            "fragment_count_total": int(
-                len(fragments)
+            "fragment_length": fragment_length,
+            "fragment_count_total": len(
+                fragments
             ),
-            "fragment_count_accepted": int(
-                len(accepted)
+            "fragment_count_accepted": len(
+                accepted
             ),
             "point_count": int(
                 point_count
             ),
-            "median_sigma_x": float(
-                fragment_stats["median_sigma_x"]
-            ),
-            "median_sigma_y": float(
-                fragment_stats["median_sigma_y"]
-            ),
-            "median_dt": float(
-                fragment_stats["median_dt"]
-            ),
+            "median_sigma_x": statistics[
+                "median_sigma_x"
+            ],
+            "median_sigma_y": statistics[
+                "median_sigma_y"
+            ],
+            "median_dt": statistics[
+                "median_dt"
+            ],
             "status": "OK",
         }
 
     # ========================================================
-    # Локальные окна
+    # Оценка sigma_meas по нескольким размерам
+    # ========================================================
+
+    @staticmethod
+    def estimate_sigma_meas(
+        segments: Iterable[TrackSegment],
+    ) -> dict:
+        """
+        Рассчитывает sigma_meas для:
+
+            20
+            30
+            60
+
+        и оценивает устойчивость.
+
+        Итоговая sigma_meas определяется медианой
+        трёх валидных оценок.
+        """
+
+        results: dict[
+            int,
+            dict,
+        ] = {}
+
+        for fragment_length in (
+            STATIONARY_FRAGMENT_LENGTHS
+        ):
+            logging.info(
+                "sigma_meas: "
+                "fragment_length=%d",
+                fragment_length,
+            )
+
+            results[
+                fragment_length
+            ] = (
+                KalmanParameterEstimator
+                .estimate_sigma_meas_for_fragment_length(
+                    segments=segments,
+                    fragment_length=fragment_length,
+                )
+            )
+
+        valid_results = [
+            result
+            for result in results.values()
+            if (
+                result["status"] == "OK"
+                and np.isfinite(
+                    result["sigma_meas"]
+                )
+            )
+        ]
+
+        if not valid_results:
+            return {
+                "results": results,
+                "sigma_meas": np.nan,
+                "sigma_meas_x": np.nan,
+                "sigma_meas_y": np.nan,
+                "stability_cv": np.nan,
+                "stability_min_max_ratio": np.nan,
+                "status": "NO_VALID_ESTIMATES",
+            }
+
+        sigma_values = np.array(
+            [
+                result["sigma_meas"]
+                for result in valid_results
+            ],
+            dtype=np.float64,
+        )
+
+        sigma_x_values = np.array(
+            [
+                result["sigma_meas_x"]
+                for result in valid_results
+            ],
+            dtype=np.float64,
+        )
+
+        sigma_y_values = np.array(
+            [
+                result["sigma_meas_y"]
+                for result in valid_results
+            ],
+            dtype=np.float64,
+        )
+
+        final_sigma = float(
+            np.median(
+                sigma_values
+            )
+        )
+
+        final_sigma_x = float(
+            np.median(
+                sigma_x_values
+            )
+        )
+
+        final_sigma_y = float(
+            np.median(
+                sigma_y_values
+            )
+        )
+
+        mean_sigma = float(
+            np.mean(
+                sigma_values
+            )
+        )
+
+        if (
+            len(sigma_values) >= 2
+            and mean_sigma > 0.0
+        ):
+            stability_cv = float(
+                np.std(
+                    sigma_values,
+                    ddof=1,
+                )
+                / mean_sigma
+            )
+        else:
+            stability_cv = 0.0
+
+        sigma_min = float(
+            np.min(
+                sigma_values
+            )
+        )
+
+        sigma_max = float(
+            np.max(
+                sigma_values
+            )
+
+        )
+
+        if sigma_min > 0.0:
+            stability_min_max_ratio = (
+                sigma_max / sigma_min
+            )
+        else:
+            stability_min_max_ratio = np.inf
+
+        if (
+            len(valid_results)
+            == len(
+                STATIONARY_FRAGMENT_LENGTHS
+            )
+        ):
+            status = "OK"
+        else:
+            status = "PARTIAL"
+
+        logging.info(
+            "sigma_meas final: "
+            "sigma_x=%.8g, "
+            "sigma_y=%.8g, "
+            "sigma=%.8g, "
+            "CV=%.6g, "
+            "max/min=%.6g, "
+            "status=%s",
+            final_sigma_x,
+            final_sigma_y,
+            final_sigma,
+            stability_cv,
+            stability_min_max_ratio,
+            status,
+        )
+
+        return {
+            "results": results,
+            "sigma_meas": final_sigma,
+            "sigma_meas_x": final_sigma_x,
+            "sigma_meas_y": final_sigma_y,
+            "stability_cv": stability_cv,
+            "stability_min_max_ratio": (
+                stability_min_max_ratio
+            ),
+            "status": status,
+        }
+
+    # ========================================================
+    # Локальные Kalman-окна
     # ========================================================
 
     @staticmethod
@@ -1183,7 +1328,7 @@ class KalmanParameterEstimator:
         NDArray[np.float64],
         NDArray[np.float64],
     ]:
-        """Строит локальные X/Y и dt для набора окон."""
+        """Формирует локальные окна."""
 
         if len(start_indices) == 0:
             empty = np.empty(
@@ -1278,9 +1423,11 @@ class KalmanParameterEstimator:
         NDArray[np.float64],
         NDArray[np.float64],
     ]:
-        """Пакетный CV-фильтр для множества локальных окон."""
+        """Пакетный CV-фильтр."""
 
-        batch_size = len(x_windows)
+        batch_size = len(
+            x_windows
+        )
 
         if batch_size == 0:
             empty = np.empty(
@@ -1538,8 +1685,14 @@ class KalmanParameterEstimator:
             try:
                 solved = np.linalg.solve(
                     S,
-                    innovation[..., None],
-                )[..., 0]
+                    innovation[
+                        ...,
+                        None,
+                    ],
+                )[
+                    ...,
+                    0
+                ]
 
                 mahalanobis_sq = np.sum(
                     innovation
@@ -1564,11 +1717,9 @@ class KalmanParameterEstimator:
                     + mahalanobis_sq
                 )
 
-                solved_gain = (
-                    np.linalg.solve(
-                        S,
-                        P_pred[:, :2, :],
-                    )
+                solved_gain = np.linalg.solve(
+                    S,
+                    P_pred[:, :2, :],
                 )
 
                 K = np.transpose(
@@ -1585,13 +1736,15 @@ class KalmanParameterEstimator:
                     )
                 )
 
+                KH = np.einsum(
+                    "bij,jk->bik",
+                    K,
+                    H,
+                )
+
                 I_KH = (
                     I[None, :, :]
-                    - np.einsum(
-                        "bij,jk->bik",
-                        K,
-                        H,
-                    )
+                    - KH
                 )
 
                 tmp = np.einsum(
@@ -1695,7 +1848,9 @@ class KalmanParameterEstimator:
     ]:
         """Пакетный RW-фильтр."""
 
-        batch_size = len(x_windows)
+        batch_size = len(
+            x_windows
+        )
 
         if batch_size == 0:
             empty = np.empty(
@@ -1822,8 +1977,14 @@ class KalmanParameterEstimator:
             try:
                 solved = np.linalg.solve(
                     S,
-                    innovation[..., None],
-                )[..., 0]
+                    innovation[
+                        ...,
+                        None,
+                    ],
+                )[
+                    ...,
+                    0
+                ]
 
                 mahalanobis_sq = np.sum(
                     innovation
@@ -1963,7 +2124,7 @@ class KalmanParameterEstimator:
         window: int,
         stride: int,
     ) -> NDArray[np.int64]:
-        """Индексы начала локальных окон."""
+        """Возвращает индексы начала окон."""
 
         n_windows = (
             segment.size
@@ -1984,7 +2145,7 @@ class KalmanParameterEstimator:
         )
 
     # ========================================================
-    # Evaluation CV
+    # Evaluate CV
     # ========================================================
 
     @staticmethod
@@ -1996,7 +2157,7 @@ class KalmanParameterEstimator:
         stride: int,
         collect_metrics: bool,
     ) -> dict:
-        """Общий пакетный расчёт CV."""
+        """Пакетный расчёт CV."""
 
         ll_list: list[
             NDArray[np.float64]
@@ -2103,7 +2264,9 @@ class KalmanParameterEstimator:
 
         if collect_metrics:
             ll = (
-                np.concatenate(ll_list)
+                np.concatenate(
+                    ll_list
+                )
                 if ll_list
                 else np.empty(
                     0,
@@ -2112,7 +2275,9 @@ class KalmanParameterEstimator:
             )
 
             m2 = (
-                np.concatenate(m2_list)
+                np.concatenate(
+                    m2_list
+                )
                 if m2_list
                 else np.empty(
                     0,
@@ -2121,7 +2286,9 @@ class KalmanParameterEstimator:
             )
 
             fd = (
-                np.concatenate(fd_list)
+                np.concatenate(
+                    fd_list
+                )
                 if fd_list
                 else np.empty(
                     0,
@@ -2151,7 +2318,7 @@ class KalmanParameterEstimator:
         }
 
     # ========================================================
-    # Evaluation RW
+    # Evaluate RW
     # ========================================================
 
     @staticmethod
@@ -2163,7 +2330,7 @@ class KalmanParameterEstimator:
         stride: int,
         collect_metrics: bool,
     ) -> dict:
-        """Общий пакетный расчёт RW."""
+        """Пакетный расчёт RW."""
 
         ll_list: list[
             NDArray[np.float64]
@@ -2270,7 +2437,9 @@ class KalmanParameterEstimator:
 
         if collect_metrics:
             ll = (
-                np.concatenate(ll_list)
+                np.concatenate(
+                    ll_list
+                )
                 if ll_list
                 else np.empty(
                     0,
@@ -2279,7 +2448,9 @@ class KalmanParameterEstimator:
             )
 
             m2 = (
-                np.concatenate(m2_list)
+                np.concatenate(
+                    m2_list
+                )
                 if m2_list
                 else np.empty(
                     0,
@@ -2288,7 +2459,9 @@ class KalmanParameterEstimator:
             )
 
             fd = (
-                np.concatenate(fd_list)
+                np.concatenate(
+                    fd_list
+                )
                 if fd_list
                 else np.empty(
                     0,
@@ -2318,7 +2491,7 @@ class KalmanParameterEstimator:
         }
 
     # ========================================================
-    # MLE CV: оптимизируем только sigma_acc
+    # MLE CV
     # ========================================================
 
     @staticmethod
@@ -2327,16 +2500,19 @@ class KalmanParameterEstimator:
         sigma_meas: float,
         sigma_acc_initial: float = DEFAULT_SIGMA_ACC_INITIAL,
         window: int = WINDOW,
-    ) -> dict[str, float | bool | str | int]:
+    ) -> dict:
         """
-        MLE CV.
-
-        sigma_meas фиксирован.
+        MLE CV при фиксированном sigma_meas.
 
         Оптимизируется только sigma_acc.
         """
 
-        if not np.isfinite(sigma_meas) or sigma_meas <= 0.0:
+        if (
+            not np.isfinite(
+                sigma_meas
+            )
+            or sigma_meas <= 0.0
+        ):
             return {
                 "success": False,
                 "sigma_meas": np.nan,
@@ -2384,23 +2560,16 @@ class KalmanParameterEstimator:
         )
 
         logging.info(
-            "CV MLE: fixed sigma_meas=%.8g, "
-            "segments=%d, MLE windows=%d, stride=%d",
+            "CV MLE: "
+            "sigma_meas=%.8g, "
+            "segments=%d, "
+            "MLE windows=%d",
             sigma_meas,
             len(prepared),
             total_windows,
-            MLE_STRIDE,
         )
 
         objective_calls = 0
-
-        log_min = np.log(
-            SIGMA_ACC_MIN
-        )
-
-        log_max = np.log(
-            SIGMA_ACC_MAX
-        )
 
         def objective(
             log_sigma_acc: float,
@@ -2410,7 +2579,9 @@ class KalmanParameterEstimator:
             objective_calls += 1
 
             sigma_acc = float(
-                np.exp(log_sigma_acc)
+                np.exp(
+                    log_sigma_acc
+                )
             )
 
             result = (
@@ -2459,6 +2630,14 @@ class KalmanParameterEstimator:
 
             return nll
 
+        log_min = np.log(
+            SIGMA_ACC_MIN
+        )
+
+        log_max = np.log(
+            SIGMA_ACC_MAX
+        )
+
         initial_log = np.clip(
             np.log(
                 sigma_acc_initial
@@ -2467,9 +2646,6 @@ class KalmanParameterEstimator:
             log_max,
         )
 
-        # В одномерной задаче сначала делаем небольшой локальный
-        # поиск вокруг первоначального значения, затем полный bounded
-        # поиск в лог-пространстве.
         local_left = max(
             log_min,
             initial_log
@@ -2521,7 +2697,7 @@ class KalmanParameterEstimator:
         }
 
     # ========================================================
-    # MLE RW: оптимизируем только sigma_rw
+    # MLE RW
     # ========================================================
 
     @staticmethod
@@ -2530,16 +2706,19 @@ class KalmanParameterEstimator:
         sigma_meas: float,
         sigma_rw_initial: float = DEFAULT_SIGMA_RW_INITIAL,
         window: int = WINDOW,
-    ) -> dict[str, float | bool | str | int]:
+    ) -> dict:
         """
-        MLE RW.
-
-        sigma_meas фиксирован.
+        MLE RW при фиксированном sigma_meas.
 
         Оптимизируется только sigma_rw.
         """
 
-        if not np.isfinite(sigma_meas) or sigma_meas <= 0.0:
+        if (
+            not np.isfinite(
+                sigma_meas
+            )
+            or sigma_meas <= 0.0
+        ):
             return {
                 "success": False,
                 "sigma_meas": np.nan,
@@ -2587,23 +2766,18 @@ class KalmanParameterEstimator:
         )
 
         logging.info(
-            "RW MLE: fixed sigma_meas=%.8g, "
-            "segments=%d, MLE windows=%d, stride=%d",
+            "RW MLE: "
+            "sigma_meas=%.8g, "
+            "segments=%d, "
+            "MLE windows=%d, "
+            "sigma_rw_max=%.8g",
             sigma_meas,
             len(prepared),
             total_windows,
-            MLE_STRIDE,
+            SIGMA_RW_MAX,
         )
 
         objective_calls = 0
-
-        log_min = np.log(
-            SIGMA_RW_MIN
-        )
-
-        log_max = np.log(
-            SIGMA_RW_MAX
-        )
 
         def objective(
             log_sigma_rw: float,
@@ -2613,7 +2787,9 @@ class KalmanParameterEstimator:
             objective_calls += 1
 
             sigma_rw = float(
-                np.exp(log_sigma_rw)
+                np.exp(
+                    log_sigma_rw
+                )
             )
 
             result = (
@@ -2662,6 +2838,14 @@ class KalmanParameterEstimator:
 
             return nll
 
+        log_min = np.log(
+            SIGMA_RW_MIN
+        )
+
+        log_max = np.log(
+            SIGMA_RW_MAX
+        )
+
         initial_log = np.clip(
             np.log(
                 sigma_rw_initial
@@ -2701,6 +2885,21 @@ class KalmanParameterEstimator:
             )
         )
 
+        hit_upper_bound = (
+            sigma_rw
+            >= 0.99 * SIGMA_RW_MAX
+        )
+
+        message = str(
+            result.message
+        )
+
+        if hit_upper_bound:
+            message += (
+                "; WARNING: sigma_rw "
+                "near upper bound"
+            )
+
         return {
             "success": bool(
                 result.success
@@ -2715,9 +2914,8 @@ class KalmanParameterEstimator:
             "n_mle_windows": int(
                 total_windows
             ),
-            "message": str(
-                result.message
-            ),
+            "hit_upper_bound": hit_upper_bound,
+            "message": message,
         }
 
     # ========================================================
@@ -2731,11 +2929,7 @@ class KalmanParameterEstimator:
         sigma_meas: float,
         window: int = WINDOW,
     ) -> dict[str, NDArray[np.float64]]:
-        """
-        Финальная CV-статистика.
-
-        Здесь stride=1.
-        """
+        """Финальная CV-статистика с stride=1."""
 
         prepared = (
             KalmanParameterEstimator
@@ -2779,7 +2973,7 @@ class KalmanParameterEstimator:
         sigma_meas: float,
         window: int = WINDOW,
     ) -> dict[str, NDArray[np.float64]]:
-        """Финальная RW-статистика, stride=1."""
+        """Финальная RW-статистика с stride=1."""
 
         prepared = (
             KalmanParameterEstimator
@@ -2813,16 +3007,14 @@ class KalmanParameterEstimator:
         }
 
     # ========================================================
-    # Сводка Mahalanobis
+    # Mahalanobis summary
     # ========================================================
 
     @staticmethod
     def summarize_mahalanobis(
         mahalanobis: NDArray[np.float64],
     ) -> dict[str, float | int]:
-        """
-        Рассчитывает основные характеристики распределения M².
-        """
+        """Сводная статистика M²."""
 
         values = np.asarray(
             mahalanobis,
@@ -2847,7 +3039,9 @@ class KalmanParameterEstimator:
             }
 
         return {
-            "n": int(values.size),
+            "n": int(
+                values.size
+            ),
             "mean": float(
                 np.mean(values)
             ),
@@ -2868,26 +3062,140 @@ class KalmanParameterEstimator:
             ),
             "frac_gt_5_991": float(
                 np.mean(
-                    values
-                    > 5.991
+                    values > 5.991
                 )
             ),
             "frac_gt_9_21": float(
                 np.mean(
-                    values
-                    > 9.21
+                    values > 9.21
                 )
             ),
             "frac_gt_13_82": float(
                 np.mean(
-                    values
-                    > 13.82
+                    values > 13.82
                 )
             ),
         }
 
     # ========================================================
-    # Валидация
+    # Calibration categories
+    # ========================================================
+
+    @staticmethod
+    def classify_calibration(
+        p95_ratio: float,
+        p99_ratio: float,
+        frac_gt_5_991: float,
+        frac_gt_9_21: float,
+        frac_gt_13_82: float,
+    ) -> tuple[str, str]:
+        """
+        Отдельно классифицирует:
+
+            central_calibration
+            tail_calibration
+
+        Это намеренно не сворачивается сразу в одно POOR.
+
+        Central:
+            ориентируется на P95/P99.
+
+        Tail:
+            ориентируется на реальные превышения теоретических
+            chi-square thresholds.
+        """
+
+        if not (
+            np.isfinite(p95_ratio)
+            and np.isfinite(p99_ratio)
+        ):
+            central = "NO_DATA"
+
+        elif (
+            0.7 <= p95_ratio <= 1.3
+            and 0.7 <= p99_ratio <= 1.3
+        ):
+            central = "GOOD"
+
+        elif (
+            p95_ratio < 0.5
+            or p95_ratio > 2.0
+            or p99_ratio < 0.5
+            or p99_ratio > 2.0
+        ):
+            central = "POOR"
+
+        else:
+            central = "CHECK"
+
+        if not (
+            np.isfinite(frac_gt_5_991)
+            and np.isfinite(frac_gt_9_21)
+            and np.isfinite(frac_gt_13_82)
+        ):
+            tail = "NO_DATA"
+
+        else:
+            expected_5 = 0.05
+            expected_1 = 0.01
+            expected_01 = 0.001
+
+            ratio_5 = (
+                frac_gt_5_991
+                / expected_5
+            )
+
+            ratio_1 = (
+                frac_gt_9_21
+                / expected_1
+            )
+
+            ratio_01 = (
+                frac_gt_13_82
+                / expected_01
+            )
+
+            tail_ratios = np.array(
+                [
+                    ratio_5,
+                    ratio_1,
+                    ratio_01,
+                ],
+                dtype=np.float64,
+            )
+
+            # Слишком много выбросов.
+            if np.any(
+                tail_ratios > 5.0
+            ):
+                tail = "HEAVY"
+
+            # Слишком мало превышений.
+            elif np.all(
+                tail_ratios < 0.5
+            ):
+                tail = "LIGHT"
+
+            # В целом нормальный диапазон.
+            elif np.all(
+                (
+                    0.5
+                    <= tail_ratios
+                )
+                & (
+                    tail_ratios
+                    <= 2.0
+                )
+            ):
+                tail = "GOOD"
+
+            else:
+                tail = "CHECK"
+
+        return central, tail
+
+    # ========================================================
+    # Validation
     # ========================================================
 
     @staticmethod
@@ -2895,15 +3203,24 @@ class KalmanParameterEstimator:
         mahalanobis: NDArray[np.float64],
         optimizer_success: bool,
         process_name: str,
-    ) -> dict[str, float | int | str]:
+    ) -> dict:
         """
-        Формирует validation-метрики.
+        Validation statistics.
 
-        Теоретические вероятности для chi2(df=2):
+        Помимо общего quality выдаются:
 
-            P(M² > 5.991) = 5%
-            P(M² > 9.210) = 1%
-            P(M² > 13.816) = 0.1%
+            central_calibration
+            tail_calibration
+
+        Это позволяет отличить:
+
+            хорошую центральную часть
+            от тяжёлого хвоста,
+
+        либо:
+
+            слишком большую uncertainty
+            от действительно хорошей модели.
         """
 
         summary = (
@@ -2934,9 +3251,12 @@ class KalmanParameterEstimator:
                 "validation_median_ratio": np.nan,
                 "validation_p95_ratio": np.nan,
                 "validation_p99_ratio": np.nan,
+                "central_calibration": "NO_DATA",
+                "tail_calibration": "NO_DATA",
                 "validation_quality": "NO_DATA",
                 "validation_message": (
-                    f"{process_name}: нет validation-данных"
+                    f"{process_name}: "
+                    "нет validation-данных"
                 ),
             }
 
@@ -2956,15 +3276,15 @@ class KalmanParameterEstimator:
             summary["p99"]
         )
 
-        frac_5_991 = float(
+        frac_5 = float(
             summary["frac_gt_5_991"]
         )
 
-        frac_9_21 = float(
+        frac_1 = float(
             summary["frac_gt_9_21"]
         )
 
-        frac_13_82 = float(
+        frac_01 = float(
             summary["frac_gt_13_82"]
         )
 
@@ -2974,92 +3294,98 @@ class KalmanParameterEstimator:
 
         median_ratio = (
             median_m2
-            / float(
-                chi2.ppf(
-                    0.50,
-                    df=2,
-                )
-            )
+            / THEORETICAL_MEDIAN_MAHALANOBIS
         )
 
         p95_ratio = (
             p95_m2
-            / MAHALANOBIS_THRESHOLD_P95
+            / MAHALANOBIS_P95_THRESHOLD
         )
 
         p99_ratio = (
             p99_m2
-            / MAHALANOBIS_THRESHOLD_P99
+            / MAHALANOBIS_P99_THRESHOLD
+        )
+
+        central_calibration, tail_calibration = (
+            KalmanParameterEstimator
+            .classify_calibration(
+                p95_ratio=p95_ratio,
+                p99_ratio=p99_ratio,
+                frac_gt_5_991=frac_5,
+                frac_gt_9_21=frac_1,
+                frac_gt_13_82=frac_01,
+            )
         )
 
         # ----------------------------------------------------
-        # Качество модели.
-        #
-        # Основной акцент:
-        #   P95, P99 и реальные хвостовые доли.
-        #
-        # Mean специально не используется как единственный
-        # критерий, поскольку редкие gross errors могут
-        # сделать его огромным.
+        # Общий quality
         # ----------------------------------------------------
-
-        close_p95 = (
-            0.7
-            <= p95_ratio
-            <= 1.3
-        )
-
-        close_p99 = (
-            0.7
-            <= p99_ratio
-            <= 1.3
-        )
-
-        frac_ok = (
-            0.5 * 0.05
-            <= frac_5_991
-            <= 2.0 * 0.05
-            and
-            0.5 * 0.01
-            <= frac_9_21
-            <= 2.0 * 0.01
-            and
-            0.5 * 0.001
-            <= frac_13_82
-            <= 2.0 * 0.001
-        )
 
         if not optimizer_success:
-            quality = "OPTIMIZER_FAILED"
-        elif close_p95 and close_p99 and frac_ok:
-            quality = "GOOD"
+            validation_quality = (
+                "OPTIMIZER_FAILED"
+            )
+
         elif (
-            p95_ratio < 0.5
-            or p95_ratio > 2.0
-            or p99_ratio < 0.5
-            or p99_ratio > 2.0
+            central_calibration
+            == "GOOD"
+            and tail_calibration
+            == "GOOD"
         ):
-            quality = "POOR"
+            validation_quality = "GOOD"
+
+        elif (
+            central_calibration
+            == "POOR"
+            and tail_calibration
+            == "HEAVY"
+        ):
+            validation_quality = "POOR"
+
+        elif (
+            central_calibration
+            == "POOR"
+            or tail_calibration
+            == "HEAVY"
+        ):
+            validation_quality = "CHECK"
+
         else:
-            quality = "CHECK"
+            validation_quality = "CHECK"
 
         return {
             "validation_n": n,
+
             "validation_mean_mahalanobis": mean_m2,
             "validation_median_mahalanobis": median_m2,
             "validation_p95_mahalanobis": p95_m2,
             "validation_p99_mahalanobis": p99_m2,
-            "validation_frac_m2_gt_5_991": frac_5_991,
-            "validation_frac_m2_gt_9_21": frac_9_21,
-            "validation_frac_m2_gt_13_82": frac_13_82,
+
+            "validation_frac_m2_gt_5_991": frac_5,
+            "validation_frac_m2_gt_9_21": frac_1,
+            "validation_frac_m2_gt_13_82": frac_01,
+
             "validation_expected_frac_gt_5_991": 0.05,
             "validation_expected_frac_gt_9_21": 0.01,
             "validation_expected_frac_gt_13_82": 0.001,
+
             "validation_mean_ratio": mean_ratio,
             "validation_median_ratio": median_ratio,
             "validation_p95_ratio": p95_ratio,
             "validation_p99_ratio": p99_ratio,
-            "validation_quality": quality,
+
+            "central_calibration": (
+                central_calibration
+            ),
+            "tail_calibration": (
+                tail_calibration
+            ),
+
+            "validation_quality": (
+                validation_quality
+            ),
+
             "validation_message": (
                 f"{process_name}: "
                 f"N={n}, "
@@ -3067,14 +3393,16 @@ class KalmanParameterEstimator:
                 f"median={median_m2:.6g}, "
                 f"P95={p95_m2:.6g}, "
                 f"P99={p99_m2:.6g}, "
-                f">5.991={frac_5_991:.6g}, "
-                f">9.21={frac_9_21:.6g}, "
-                f">13.82={frac_13_82:.6g}"
+                f">5.991={frac_5:.6g}, "
+                f">9.21={frac_1:.6g}, "
+                f">13.82={frac_01:.6g}, "
+                f"central={central_calibration}, "
+                f"tail={tail_calibration}"
             ),
         }
 
     # ========================================================
-    # Работа с одним train-файлом
+    # Один train-файл
     # ========================================================
 
     @staticmethod
@@ -3086,10 +3414,12 @@ class KalmanParameterEstimator:
         output_rows: list[dict],
     ) -> None:
         """
-        Полностью калибрует один train-файл.
+        Обучает один train-файл.
 
-        sigma_meas оценивается один раз по stand,
-        затем используется для CV и RW всех segment_type.
+        sigma_meas:
+            оценивается отдельно для 20/30/60 точек.
+
+        Затем итоговая sigma_meas фиксируется для CV/RW.
         """
 
         logging.info(
@@ -3102,7 +3432,7 @@ class KalmanParameterEstimator:
         )
 
         # ====================================================
-        # Этап 1. Оценка sigma_meas
+        # sigma_meas
         # ====================================================
 
         stand_segments = (
@@ -3111,7 +3441,7 @@ class KalmanParameterEstimator:
 
         if not stand_segments:
             logging.error(
-                "%s: отсутствуют подходящие stand-сегменты",
+                "%s: stand-сегменты отсутствуют",
                 train_path.name,
             )
 
@@ -3128,12 +3458,9 @@ class KalmanParameterEstimator:
             sigma_result["sigma_meas"]
         )
 
-        total_stand_points = sum(
-            segment.size
-            for segment in stand_segments
-        )
-
-        if not np.isfinite(sigma_meas):
+        if not np.isfinite(
+            sigma_meas
+        ):
             logging.error(
                 "%s: sigma_meas не удалось оценить",
                 train_path.name,
@@ -3148,55 +3475,92 @@ class KalmanParameterEstimator:
         )
 
         # ----------------------------------------------------
-        # Строка результата sigma_meas
+        # Базовая строка с sigma_meas
         # ----------------------------------------------------
 
+        row = {
+            "train_file": train_path.name,
+            "validation_file": validation_file_name,
+            "segment_type": "stand",
+            "method": "stationary_stand_diff",
+
+            "n_segments": len(
+                stand_segments
+            ),
+
+            "n_points": sum(
+                segment.size
+                for segment in stand_segments
+            ),
+
+            "sigma_meas_x": sigma_result[
+                "sigma_meas_x"
+            ],
+
+            "sigma_meas_y": sigma_result[
+                "sigma_meas_y"
+            ],
+
+            "sigma_meas": sigma_meas,
+
+            "sigma_acc": np.nan,
+            "sigma_rw": np.nan,
+
+            "negative_log_likelihood": np.nan,
+            "n_mle_windows": np.nan,
+
+            "optimizer_success": True,
+            "optimizer_message": (
+                "sigma_meas estimated from "
+                "stationary stand fragments"
+            ),
+
+            "stationary_fragments_total": np.nan,
+            "stationary_fragments_accepted": np.nan,
+
+            "sigma_meas_fragment_20": (
+                sigma_result[
+                    "results"
+                ][20]["sigma_meas"]
+            ),
+
+            "sigma_meas_fragment_30": (
+                sigma_result[
+                    "results"
+                ][30]["sigma_meas"]
+            ),
+
+            "sigma_meas_fragment_60": (
+                sigma_result[
+                    "results"
+                ][60]["sigma_meas"]
+            ),
+
+            "sigma_meas_stability_cv": (
+                sigma_result[
+                    "stability_cv"
+                ]
+            ),
+
+            "sigma_meas_stability_min_max_ratio": (
+                sigma_result[
+                    "stability_min_max_ratio"
+                ]
+            ),
+
+            "sigma_meas_stability_status": (
+                sigma_result[
+                    "status"
+                ]
+            ),
+        }
+
         output_rows.append(
-            {
-                "train_file": train_path.name,
-                "validation_file": validation_file_name,
-                "segment_type": "stand",
-                "method": "stationary_stand_diff",
-
-                "n_segments": len(
-                    stand_segments
-                ),
-                "n_points": total_stand_points,
-
-                "sigma_meas_x": sigma_result[
-                    "sigma_meas_x"
-                ],
-                "sigma_meas_y": sigma_result[
-                    "sigma_meas_y"
-                ],
-                "sigma_meas": sigma_meas,
-
-                "sigma_acc": np.nan,
-                "sigma_rw": np.nan,
-
-                "negative_log_likelihood": np.nan,
-                "n_mle_windows": np.nan,
-                "optimizer_success": True,
-                "optimizer_message": (
-                    "sigma_meas estimated "
-                    "from stationary stand fragments"
-                ),
-
-                "stationary_fragments_total": (
-                    sigma_result[
-                        "fragment_count_total"
-                    ]
-                ),
-                "stationary_fragments_accepted": (
-                    sigma_result[
-                        "fragment_count_accepted"
-                    ]
-                ),
-            }
+            row
         )
 
         # ====================================================
-        # Этап 2. MLE process noise
+        # MLE
         # ====================================================
 
         for segment_type, current_segments in (
@@ -3217,10 +3581,10 @@ class KalmanParameterEstimator:
             )
 
             logging.info(
-                "%s / %s: MLE, "
+                "%s / %s: MLE: "
                 "segments=%d, "
                 "points=%d, "
-                "FIXED sigma_meas=%.8g",
+                "fixed sigma_meas=%.8g",
                 train_path.name,
                 segment_type,
                 len(current_segments),
@@ -3273,14 +3637,17 @@ class KalmanParameterEstimator:
                 "n_segments": len(
                     current_segments
                 ),
+
                 "n_points": total_points,
 
                 "sigma_meas_x": sigma_result[
                     "sigma_meas_x"
                 ],
+
                 "sigma_meas_y": sigma_result[
                     "sigma_meas_y"
                 ],
+
                 "sigma_meas": sigma_meas,
 
                 "sigma_acc": sigma_acc,
@@ -3291,26 +3658,54 @@ class KalmanParameterEstimator:
                         "negative_log_likelihood"
                     ]
                 ),
+
                 "n_mle_windows": (
                     cv_result[
                         "n_mle_windows"
                     ]
                 ),
+
                 "optimizer_success": (
                     cv_result["success"]
                 ),
+
                 "optimizer_message": (
                     cv_result["message"]
                 ),
 
-                "stationary_fragments_total": (
+                "sigma_meas_fragment_20": (
                     sigma_result[
-                        "fragment_count_total"
+                        "results"
+                    ][20]["sigma_meas"]
+                ),
+
+                "sigma_meas_fragment_30": (
+                    sigma_result[
+                        "results"
+                    ][30]["sigma_meas"]
+                ),
+
+                "sigma_meas_fragment_60": (
+                    sigma_result[
+                        "results"
+                    ][60]["sigma_meas"]
+                ),
+
+                "sigma_meas_stability_cv": (
+                    sigma_result[
+                        "stability_cv"
                     ]
                 ),
-                "stationary_fragments_accepted": (
+
+                "sigma_meas_stability_min_max_ratio": (
                     sigma_result[
-                        "fragment_count_accepted"
+                        "stability_min_max_ratio"
+                    ]
+                ),
+
+                "sigma_meas_stability_status": (
+                    sigma_result[
+                        "status"
                     ]
                 ),
             }
@@ -3363,6 +3758,10 @@ class KalmanParameterEstimator:
                 )
 
                 cv_row.update(
+                    validation
+                )
+
+                cv_row.update(
                     {
                         "validation_n_segments": len(
                             validation_segments
@@ -3372,10 +3771,6 @@ class KalmanParameterEstimator:
                             for segment in validation_segments
                         ),
                     }
-                )
-
-                cv_row.update(
-                    validation
                 )
 
                 logging.info(
@@ -3395,17 +3790,14 @@ class KalmanParameterEstimator:
             # RW
             # =================================================
 
-            sigma_rw_initial = max(
-                DEFAULT_SIGMA_RW_INITIAL,
-                SIGMA_RW_MIN,
-            )
-
             rw_result = (
                 KalmanParameterEstimator
                 .fit_rw_mle(
                     segments=current_segments,
                     sigma_meas=sigma_meas,
-                    sigma_rw_initial=sigma_rw_initial,
+                    sigma_rw_initial=(
+                        DEFAULT_SIGMA_RW_INITIAL
+                    ),
                     window=WINDOW,
                 )
             )
@@ -3419,7 +3811,8 @@ class KalmanParameterEstimator:
                 "success=%s, "
                 "sigma_meas=%.8g, "
                 "sigma_rw=%.8g, "
-                "NLL=%.8g",
+                "NLL=%.8g, "
+                "upper_bound=%s",
                 train_path.name,
                 segment_type,
                 rw_result["success"],
@@ -3428,6 +3821,10 @@ class KalmanParameterEstimator:
                 rw_result[
                     "negative_log_likelihood"
                 ],
+                rw_result.get(
+                    "hit_upper_bound",
+                    False,
+                ),
             )
 
             rw_row = {
@@ -3439,14 +3836,17 @@ class KalmanParameterEstimator:
                 "n_segments": len(
                     current_segments
                 ),
+
                 "n_points": total_points,
 
                 "sigma_meas_x": sigma_result[
                     "sigma_meas_x"
                 ],
+
                 "sigma_meas_y": sigma_result[
                     "sigma_meas_y"
                 ],
+
                 "sigma_meas": sigma_meas,
 
                 "sigma_acc": np.nan,
@@ -3457,26 +3857,61 @@ class KalmanParameterEstimator:
                         "negative_log_likelihood"
                     ]
                 ),
+
                 "n_mle_windows": (
                     rw_result[
                         "n_mle_windows"
                     ]
                 ),
+
                 "optimizer_success": (
                     rw_result["success"]
                 ),
+
                 "optimizer_message": (
                     rw_result["message"]
                 ),
 
-                "stationary_fragments_total": (
+                "rw_hit_upper_bound": (
+                    rw_result.get(
+                        "hit_upper_bound",
+                        False,
+                    )
+                ),
+
+                "sigma_meas_fragment_20": (
                     sigma_result[
-                        "fragment_count_total"
+                        "results"
+                    ][20]["sigma_meas"]
+                ),
+
+                "sigma_meas_fragment_30": (
+                    sigma_result[
+                        "results"
+                    ][30]["sigma_meas"]
+                ),
+
+                "sigma_meas_fragment_60": (
+                    sigma_result[
+                        "results"
+                    ][60]["sigma_meas"]
+                ),
+
+                "sigma_meas_stability_cv": (
+                    sigma_result[
+                        "stability_cv"
                     ]
                 ),
-                "stationary_fragments_accepted": (
+
+                "sigma_meas_stability_min_max_ratio": (
                     sigma_result[
-                        "fragment_count_accepted"
+                        "stability_min_max_ratio"
+                    ]
+                ),
+
+                "sigma_meas_stability_status": (
+                    sigma_result[
+                        "status"
                     ]
                 ),
             }
@@ -3523,6 +3958,10 @@ class KalmanParameterEstimator:
                 )
 
                 rw_row.update(
+                    validation
+                )
+
+                rw_row.update(
                     {
                         "validation_n_segments": len(
                             validation_segments
@@ -3532,10 +3971,6 @@ class KalmanParameterEstimator:
                             for segment in validation_segments
                         ),
                     }
-                )
-
-                rw_row.update(
-                    validation
                 )
 
                 logging.info(
@@ -3551,6 +3986,12 @@ class KalmanParameterEstimator:
                 rw_row
             )
 
+            logging.info(
+                "%s / %s: MLE завершён",
+                train_path.name,
+                segment_type,
+            )
+
         logging.info(
             "TRAIN experiment %s завершён",
             train_path.name,
@@ -3564,7 +4005,7 @@ class KalmanParameterEstimator:
 def load_file(
     path: Path,
 ) -> dict[str, list[TrackSegment]]:
-    """Загружает и разбивает файл на segment sets."""
+    """Загружает, фильтрует и разбивает CSV."""
 
     logging.info(
         "Загрузка файла: %s",
@@ -3622,7 +4063,8 @@ def load_file(
         segment_sets.items()
     ):
         logging.info(
-            "%s / %s: segments=%d, points=%d",
+            "%s / %s: "
+            "segments=%d, points=%d",
             path.name,
             segment_type,
             len(current_segments),
@@ -3649,11 +4091,17 @@ if __name__ == "__main__":
         ),
     )
 
-    path_root = Path(__file__).parent
+    path_root = Path(
+        __file__
+    ).parent
 
     train_paths = [
-        path_root / "data" / "1.csv",
-        path_root / "data" / "2.csv",
+        path_root
+        / "data"
+        / "1.csv",
+        path_root
+        / "data"
+        / "2.csv",
         path_root / "data" / "3.csv"
     ]
 
@@ -3706,22 +4154,24 @@ if __name__ == "__main__":
     )
 
     logging.info(
-        "STATIONARY_FRAGMENT_LENGTH=%d",
-        STATIONARY_FRAGMENT_LENGTH,
-    )
-
-    logging.info(
-        "STATIONARITY_Z=%.3f",
-        STATIONARITY_Z,
-    )
-
-    logging.info(
         "BATCH_SIZE=%d",
         BATCH_SIZE,
     )
 
+    logging.info(
+        "SIGMA_RW_MAX=%.8g",
+        SIGMA_RW_MAX,
+    )
+
+    logging.info(
+        "STATIONARY_FRAGMENT_LENGTHS=%s",
+        STATIONARY_FRAGMENT_LENGTHS,
+    )
+
+    all_results: list[dict] = []
+
     # ========================================================
-    # Загружаем validation один раз
+    # Validation загружается один раз
     # ========================================================
 
     validation_segment_sets = load_file(
@@ -3729,10 +4179,8 @@ if __name__ == "__main__":
     )
 
     # ========================================================
-    # Каждый train-файл независимо
+    # Независимое обучение
     # ========================================================
-
-    all_results: list[dict] = []
 
     for train_path in train_paths:
         train_segment_sets = load_file(
@@ -3765,8 +4213,13 @@ if __name__ == "__main__":
         output_path,
     )
 
+    logging.info(
+        "Количество строк: %d",
+        len(result_df),
+    )
+
     # ========================================================
-    # Печать
+    # Печать основных результатов
     # ========================================================
 
     if result_df.empty:
@@ -3782,28 +4235,45 @@ if __name__ == "__main__":
             "method",
             "n_segments",
             "n_points",
+
             "sigma_meas_x",
             "sigma_meas_y",
             "sigma_meas",
+
+            "sigma_meas_fragment_20",
+            "sigma_meas_fragment_30",
+            "sigma_meas_fragment_60",
+
+            "sigma_meas_stability_cv",
+            "sigma_meas_stability_min_max_ratio",
+            "sigma_meas_stability_status",
+
             "sigma_acc",
             "sigma_rw",
+            "rw_hit_upper_bound",
+
             "negative_log_likelihood",
             "n_mle_windows",
             "optimizer_success",
-            "stationary_fragments_total",
-            "stationary_fragments_accepted",
+
             "validation_n",
+
             "validation_mean_mahalanobis",
             "validation_median_mahalanobis",
             "validation_p95_mahalanobis",
             "validation_p99_mahalanobis",
+
             "validation_frac_m2_gt_5_991",
             "validation_frac_m2_gt_9_21",
             "validation_frac_m2_gt_13_82",
+
             "validation_mean_ratio",
             "validation_median_ratio",
             "validation_p95_ratio",
             "validation_p99_ratio",
+
+            "central_calibration",
+            "tail_calibration",
             "validation_quality",
         ]
 
