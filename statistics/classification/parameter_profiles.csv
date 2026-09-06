@@ -1,0 +1,7 @@
+profile,model,sigma_meas_m,sigma_acc_m_s2,sigma_rw_m_sqrt_s,description
+from_1,CV,0.658406,0.07072,,Параметры калибровки по 1.csv
+from_1,RW,0.658406,,6.211997,Параметры калибровки по 1.csv
+from_2,CV,1.221545,0.047042,,Параметры калибровки по 2.csv
+from_2,RW,1.221545,,9.3137,Параметры калибровки по 2.csv
+from_3,CV,0.656633,4.094650033295135,,Диагностический self-calibrated профиль: sigma_meas и process-noise оценены непосредственно по 3.csv
+from_3,RW,0.656633,,100.98456462226092,Диагностический self-calibrated профиль: sigma_meas и process-noise оценены непосредственно по 3.csv
