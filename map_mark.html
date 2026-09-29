@@ -1,0 +1,6307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>CSV Track Labeler</title>
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+
+            font-family: Arial, sans-serif;
+
+            overflow: hidden;
+        }
+
+        #map {
+            position: absolute;
+            inset: 0;
+        }
+
+        /* =========================================================
+           CONTROL PANEL
+        ========================================================= */
+
+        .control-panel {
+            position: absolute;
+
+            top: 10px;
+            left: 10px;
+
+            z-index: 2000;
+
+            width: 420px;
+            max-height: calc(100vh - 20px);
+
+            background: rgba(255, 255, 255, 0.97);
+
+            border-radius: 8px;
+
+            box-shadow:
+                0 2px 15px rgba(0, 0, 0, 0.25);
+
+            padding: 15px;
+
+            overflow-y: auto;
+        }
+
+        .control-panel h3 {
+            margin: 0 0 12px 0;
+
+            font-size: 18px;
+        }
+
+        .section {
+            border-top: 1px solid #ddd;
+
+            padding-top: 12px;
+
+            margin-top: 12px;
+        }
+
+        .section:first-child {
+            border-top: none;
+
+            padding-top: 0;
+
+            margin-top: 0;
+        }
+
+        .row {
+            display: flex;
+
+            align-items: center;
+
+            gap: 8px;
+
+            margin-bottom: 8px;
+        }
+
+        .row label {
+            flex: 1;
+        }
+
+        button,
+        input,
+        select {
+            font-family: inherit;
+        }
+
+        button {
+            border: 1px solid #aaa;
+
+            background: #f5f5f5;
+
+            border-radius: 4px;
+
+            padding: 7px 12px;
+
+            cursor: pointer;
+        }
+
+        button:hover:not(:disabled) {
+            background: #e8e8e8;
+        }
+
+        button:disabled {
+            opacity: 0.45;
+
+            cursor: default;
+        }
+
+        .success-button {
+            background: #388e3c;
+
+            color: white;
+
+            border-color: #2e7d32;
+        }
+
+        .success-button:hover:not(:disabled) {
+            background: #2e7d32;
+        }
+
+        .danger-button {
+            background: #d32f2f;
+
+            color: white;
+
+            border-color: #c62828;
+        }
+
+        .danger-button:hover:not(:disabled) {
+            background: #c62828;
+        }
+
+        .undo-button {
+            background: #6a1b9a;
+
+            color: white;
+
+            border-color: #4a148c;
+        }
+
+        .undo-button:hover:not(:disabled) {
+            background: #4a148c;
+        }
+
+        .status-message {
+            padding: 8px 10px;
+
+            border-radius: 4px;
+
+            background: #f5f5f5;
+
+            font-size: 13px;
+
+            line-height: 1.4;
+        }
+
+        .status-message.success {
+            background: #e8f5e9;
+
+            color: #2e7d32;
+        }
+
+        .status-message.error {
+            background: #ffebee;
+
+            color: #c62828;
+        }
+
+        .status-message.warning {
+            background: #fff8e1;
+
+            color: #ef6c00;
+        }
+
+        .selection-status {
+            padding: 10px;
+
+            border-radius: 5px;
+
+            background: #e3f2fd;
+
+            border: 1px solid #90caf9;
+
+            font-size: 13px;
+        }
+
+        .selection-status.active {
+            background: #fff3e0;
+
+            border-color: #ffb74d;
+        }
+
+        .file-name {
+            font-size: 12px;
+
+            color: #555;
+
+            margin-top: 6px;
+
+            word-break: break-all;
+        }
+
+        .page-info {
+            text-align: center;
+
+            font-weight: bold;
+
+            padding: 5px;
+        }
+
+        .navigation {
+            display: flex;
+
+            gap: 5px;
+        }
+
+        .navigation button {
+            flex: 1;
+
+            padding-left: 5px;
+            padding-right: 5px;
+        }
+
+        .stats {
+            font-size: 12px;
+
+            line-height: 1.6;
+        }
+
+        .legend {
+            font-size: 12px;
+        }
+
+        .legend-item {
+            display: flex;
+
+            align-items: center;
+
+            gap: 7px;
+
+            margin-bottom: 5px;
+        }
+
+        .legend-color {
+            width: 14px;
+            height: 14px;
+
+            border-radius: 50%;
+
+            border: 1px solid #333;
+        }
+
+        .legend-move {
+            background: #2e7d32;
+        }
+
+        .legend-stand {
+            background: #1565c0;
+        }
+
+        .legend-anomaly {
+            background: #d32f2f;
+        }
+
+        /* =========================================================
+           TABLE
+        ========================================================= */
+
+        .table-panel {
+            position: absolute;
+
+            z-index: 1500;
+
+            left: 440px;
+            right: 10px;
+            bottom: 10px;
+
+            height: 230px;
+
+            background: rgba(255, 255, 255, 0.97);
+
+            border-radius: 8px;
+
+            box-shadow:
+                0 2px 15px rgba(0, 0, 0, 0.25);
+
+            display: flex;
+
+            flex-direction: column;
+        }
+
+        .table-header {
+            display: flex;
+
+            align-items: center;
+
+            justify-content: space-between;
+
+            min-height: 35px;
+
+            padding: 6px 10px;
+
+            border-bottom: 1px solid #ddd;
+
+            font-size: 12px;
+        }
+
+        .table-wrapper {
+            flex: 1;
+
+            min-height: 0;
+
+            overflow: auto;
+        }
+
+        table {
+            width: 100%;
+
+            border-collapse: collapse;
+
+            font-size: 11px;
+        }
+
+        thead {
+            position: sticky;
+
+            top: 0;
+
+            z-index: 5;
+        }
+
+        th {
+            background: #eeeeee;
+
+            border-bottom: 1px solid #ccc;
+
+            padding: 4px 6px;
+
+            text-align: left;
+
+            white-space: nowrap;
+        }
+
+        td {
+            border-bottom: 1px solid #eee;
+
+            padding: 3px 6px;
+
+            white-space: nowrap;
+        }
+
+        tbody tr {
+            cursor: pointer;
+
+            transition:
+                background-color 0.15s ease;
+        }
+
+        tbody tr:hover {
+            background: #e3f2fd;
+        }
+
+        tbody tr.selected-row {
+            background: rgba(255, 152, 0, 0.35);
+        }
+
+        tbody tr.map-focused-row {
+            background: #fff3cd !important;
+
+            box-shadow:
+                inset 0 0 0 2px #ff9800;
+
+            animation:
+                tableRowHighlight 1.5s ease;
+        }
+
+        @keyframes tableRowHighlight {
+            0% {
+                background: #ffb74d;
+            }
+
+            100% {
+                background: #fff3cd;
+            }
+        }
+
+        .status-select,
+        .water-select {
+            min-width: 90px;
+
+            padding: 2px 4px;
+
+            border-radius: 3px;
+
+            border: 1px solid #bbb;
+
+            font-size: 11px;
+        }
+
+        .status-select.move {
+            background: #e8f5e9;
+
+            color: #1b5e20;
+        }
+
+        .status-select.stand {
+            background: #e3f2fd;
+
+            color: #0d47a1;
+        }
+
+        .status-select.anomaly {
+            background: #ffebee;
+
+            color: #b71c1c;
+        }
+
+        .water-select.true {
+            background: #e3f2fd;
+
+            color: #0d47a1;
+        }
+
+        .water-select.false {
+            background: #f5f5f5;
+
+            color: #333;
+        }
+
+        /* =========================================================
+           INTERVAL MODAL
+        ========================================================= */
+
+        .interval-modal-overlay {
+            display: none;
+
+            position: fixed;
+
+            inset: 0;
+
+            z-index: 10000;
+
+            background:
+                rgba(0, 0, 0, 0.45);
+
+            align-items: center;
+
+            justify-content: center;
+        }
+
+        .interval-modal-overlay.visible {
+            display: flex;
+        }
+
+        .interval-modal {
+            width: 460px;
+
+            max-width:
+                calc(100vw - 30px);
+
+            background: white;
+
+            border-radius: 10px;
+
+            box-shadow:
+                0 10px 40px rgba(0, 0, 0, 0.35);
+
+            padding: 20px;
+        }
+
+        .interval-modal h3 {
+            margin:
+                0
+                0
+                10px
+                0;
+        }
+
+        .interval-description {
+            color: #555;
+
+            font-size: 13px;
+
+            line-height: 1.5;
+
+            margin-bottom: 15px;
+        }
+
+        .interval-option-block {
+            margin-top: 15px;
+        }
+
+        .interval-option-title {
+            font-size: 13px;
+
+            font-weight: bold;
+
+            margin-bottom: 8px;
+        }
+
+        .interval-status-buttons {
+            display: grid;
+
+            grid-template-columns:
+                1fr 1fr 1fr;
+
+            gap: 10px;
+        }
+
+        .interval-status-button {
+            min-height: 70px;
+
+            font-size: 15px;
+
+            font-weight: bold;
+
+            border-radius: 7px;
+
+            border: 2px solid transparent;
+        }
+
+        .interval-status-button.move {
+            background: #e8f5e9;
+
+            border-color: #66bb6a;
+
+            color: #1b5e20;
+        }
+
+        .interval-status-button.move:hover,
+        .interval-status-button.move.selected {
+            background: #c8e6c9;
+        }
+
+        .interval-status-button.stand {
+            background: #e3f2fd;
+
+            border-color: #42a5f5;
+
+            color: #0d47a1;
+        }
+
+        .interval-status-button.stand:hover,
+        .interval-status-button.stand.selected {
+            background: #bbdefb;
+        }
+
+        .interval-status-button.anomaly {
+            background: #ffebee;
+
+            border-color: #ef5350;
+
+            color: #b71c1c;
+        }
+
+        .interval-status-button.anomaly:hover,
+        .interval-status-button.anomaly.selected {
+            background: #ffcdd2;
+        }
+
+        .water-buttons {
+            display: grid;
+
+            grid-template-columns:
+                1fr 1fr;
+
+            gap: 10px;
+        }
+
+        .water-button {
+            min-height: 55px;
+
+            border:
+                2px
+                solid
+                #bbb;
+
+            background: #f5f5f5;
+
+            font-size: 14px;
+
+            border-radius: 6px;
+        }
+
+        .water-button:hover,
+        .water-button.selected {
+            background: #e3f2fd;
+
+            border-color:
+                #1976d2;
+
+            color:
+                #0d47a1;
+
+            font-weight:
+                bold;
+        }
+
+        .interval-selected-values {
+            margin-top: 15px;
+
+            padding: 10px;
+
+            background: #f5f5f5;
+
+            border-radius: 5px;
+
+            font-size: 13px;
+
+            line-height: 1.7;
+        }
+
+        .interval-apply-button {
+            width: 100%;
+
+            margin-top: 12px;
+
+            background: #388e3c;
+
+            color: white;
+
+            border-color: #2e7d32;
+
+            font-size: 14px;
+
+            font-weight: bold;
+        }
+
+        .interval-apply-button:hover:not(:disabled) {
+            background: #2e7d32;
+        }
+
+        .interval-modal-cancel {
+            margin-top: 8px;
+
+            width: 100%;
+        }
+
+        /* =========================================================
+           LOADING
+        ========================================================= */
+
+        .loading-overlay {
+            display: none;
+
+            position: fixed;
+
+            inset: 0;
+
+            z-index: 11000;
+
+            background:
+                rgba(0, 0, 0, 0.45);
+
+            align-items: center;
+
+            justify-content: center;
+        }
+
+        .loading-overlay.visible {
+            display: flex;
+        }
+
+        .loading-box {
+            background: white;
+
+            padding: 25px 35px;
+
+            border-radius: 8px;
+
+            box-shadow:
+                0 2px 20px rgba(0, 0, 0, 0.3);
+
+            text-align: center;
+        }
+
+        .spinner {
+            width: 35px;
+            height: 35px;
+
+            margin:
+                0
+                auto
+                15px;
+
+            border:
+                4px
+                solid
+                #ddd;
+
+            border-top-color:
+                #1976d2;
+
+            border-radius: 50%;
+
+            animation:
+                spin
+                0.8s
+                linear
+                infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform:
+                    rotate(360deg);
+            }
+        }
+
+        /* =========================================================
+           RESPONSIVE
+        ========================================================= */
+
+        @media (max-width: 1000px) {
+
+            .control-panel {
+                width: 360px;
+            }
+
+            .table-panel {
+                left: 380px;
+            }
+        }
+
+        @media (max-width: 750px) {
+
+            .control-panel {
+                width:
+                    calc(100% - 20px);
+
+                max-height: 42vh;
+            }
+
+            .table-panel {
+                left: 10px;
+
+                right: 10px;
+
+                bottom: 10px;
+
+                height: 200px;
+            }
+
+            .interval-status-buttons {
+                grid-template-columns:
+                    1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="map"></div>
+
+
+<!-- =============================================================
+     CONTROL PANEL
+============================================================= -->
+
+<div class="control-panel">
+
+    <h3>Разметчик GPS-трека</h3>
+
+    <div class="section">
+
+        <div class="row">
+
+            <input
+                type="file"
+                id="csv-file"
+                accept=".csv,text/csv"
+            >
+
+        </div>
+
+        <div
+            id="file-name"
+            class="file-name"
+        >
+            CSV-файл не выбран
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <div class="row">
+
+            <label>
+                Размер страницы:
+            </label>
+
+            <input
+                type="number"
+                id="page-size"
+                value="10000"
+                min="100"
+                step="100"
+                style="width: 100px;"
+            >
+
+        </div>
+
+
+        <div class="row">
+
+            <label>
+                Статус по умолчанию:
+            </label>
+
+            <select id="default-status">
+
+                <option
+                    value="anomaly"
+                    selected
+                >
+                    anomaly
+                </option>
+
+                <option value="move">
+                    move
+                </option>
+
+                <option value="stand">
+                    stand
+                </option>
+
+            </select>
+
+        </div>
+
+
+        <div class="row">
+
+            <label>
+                is_water по умолчанию:
+            </label>
+
+            <select id="default-is-water">
+
+                <option
+                    value="false"
+                    selected
+                >
+                    false
+                </option>
+
+                <option value="true">
+                    true
+                </option>
+
+            </select>
+
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <div class="navigation">
+
+            <button
+                id="first-page"
+                disabled
+            >
+                « Первая
+            </button>
+
+            <button
+                id="prev-page"
+                disabled
+            >
+                ← Назад
+            </button>
+
+            <button
+                id="next-page"
+                disabled
+            >
+                Вперёд →
+            </button>
+
+            <button
+                id="last-page"
+                disabled
+            >
+                Последняя »
+            </button>
+
+        </div>
+
+
+        <div
+            id="page-info"
+            class="page-info"
+        >
+            Страница не загружена
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <div
+            id="selection-status"
+            class="selection-status"
+        >
+            Выберите первую точку интервала.
+        </div>
+
+
+        <div
+            class="row"
+            style="margin-top: 8px;"
+        >
+
+            <button
+                id="cancel-selection"
+                disabled
+            >
+                Отменить выбор
+            </button>
+
+            <button
+                id="undo-button"
+                class="undo-button"
+                disabled
+            >
+                Undo
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <button
+            id="clear-current-page"
+            disabled
+            style="
+                width: 100%;
+                margin-bottom: 7px;
+            "
+        >
+            Сбросить изменения текущей страницы
+        </button>
+
+
+        <button
+            id="clear-all"
+            class="danger-button"
+            disabled
+            style="
+                width: 100%;
+                margin-bottom: 7px;
+            "
+        >
+            Удалить всю пользовательскую разметку
+        </button>
+
+
+        <button
+            id="export-button"
+            class="success-button"
+            disabled
+            style="width: 100%;"
+        >
+            Экспортировать CSV
+        </button>
+
+    </div>
+
+
+    <div class="section">
+
+        <div class="stats">
+
+            <div>
+                Строк на странице:
+                <b id="page-row-count">0</b>
+            </div>
+
+            <div>
+                Диапазон:
+                <b id="row-range">—</b>
+            </div>
+
+            <div>
+                move:
+                <b id="move-count">0</b>
+            </div>
+
+            <div>
+                stand:
+                <b id="stand-count">0</b>
+            </div>
+
+            <div>
+                anomaly:
+                <b id="anomaly-count">0</b>
+            </div>
+
+            <div>
+                is_water=true:
+                <b id="water-count">0</b>
+            </div>
+
+            <div>
+                Пользовательских изменений:
+                <b id="interval-count">0</b>
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="section legend">
+
+        <div class="legend-item">
+
+            <span
+                class="legend-color legend-move"
+            ></span>
+
+            move
+
+        </div>
+
+
+        <div class="legend-item">
+
+            <span
+                class="legend-color legend-stand"
+            ></span>
+
+            stand
+
+        </div>
+
+
+        <div class="legend-item">
+
+            <span
+                class="legend-color legend-anomaly"
+            ></span>
+
+            anomaly
+
+        </div>
+
+
+        <p>
+            Один клик по точке или строке —
+            выбор точки интервала.
+        </p>
+
+
+        <p>
+            Двойной клик по точке карты или строке
+            таблицы — выбор точки и увеличение карты.
+        </p>
+
+    </div>
+
+
+    <div
+        id="status-message"
+        class="status-message"
+    >
+        Загрузите CSV-файл.
+    </div>
+
+</div>
+
+
+<!-- =============================================================
+     TABLE
+============================================================= -->
+
+<div class="table-panel">
+
+    <div class="table-header">
+
+        <b>
+            Точки текущей страницы
+        </b>
+
+        <span>
+            Клик — выбор.
+            Двойной клик — переход к точке.
+        </span>
+
+    </div>
+
+
+    <div
+        id="table-wrapper"
+        class="table-wrapper"
+    >
+
+        <table>
+
+            <thead>
+
+                <tr id="table-head"></tr>
+
+            </thead>
+
+            <tbody id="table-body"></tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+
+<!-- =============================================================
+     INTERVAL MODAL
+============================================================= -->
+
+<div
+    id="interval-modal-overlay"
+    class="interval-modal-overlay"
+>
+
+    <div
+        class="interval-modal"
+        role="dialog"
+        aria-modal="true"
+    >
+
+        <h3>
+            Разметка участка
+        </h3>
+
+
+        <div
+            id="interval-modal-description"
+            class="interval-description"
+        >
+            Выберите параметры выбранного интервала.
+        </div>
+
+
+        <div class="interval-option-block">
+
+            <div class="interval-option-title">
+                Тип участка
+            </div>
+
+
+            <div class="interval-status-buttons">
+
+                <button
+                    class="interval-status-button move"
+                    data-status="move"
+                >
+                    move
+                </button>
+
+
+                <button
+                    class="interval-status-button stand"
+                    data-status="stand"
+                >
+                    stand
+                </button>
+
+
+                <button
+                    class="interval-status-button anomaly"
+                    data-status="anomaly"
+                >
+                    anomaly
+                </button>
+
+            </div>
+
+        </div>
+
+
+        <div class="interval-option-block">
+
+            <div class="interval-option-title">
+                is_water
+            </div>
+
+
+            <div class="water-buttons">
+
+                <button
+                    class="water-button"
+                    data-water="false"
+                >
+                    false — суша
+                </button>
+
+
+                <button
+                    class="water-button"
+                    data-water="true"
+                >
+                    true — вода
+                </button>
+
+            </div>
+
+        </div>
+
+
+        <div class="interval-selected-values">
+
+            <div>
+                Тип:
+                <b id="selected-interval-status">
+                    не выбран
+                </b>
+            </div>
+
+
+            <div>
+                is_water:
+                <b id="selected-interval-water">
+                    не выбран
+                </b>
+            </div>
+
+        </div>
+
+
+        <button
+            id="interval-apply"
+            class="interval-apply-button"
+            disabled
+        >
+            Применить
+        </button>
+
+
+        <button
+            id="interval-modal-cancel"
+            class="interval-modal-cancel"
+        >
+            Отмена
+        </button>
+
+    </div>
+
+</div>
+
+
+<!-- =============================================================
+     LOADING
+============================================================= -->
+
+<div
+    id="loading-overlay"
+    class="loading-overlay"
+>
+
+    <div class="loading-box">
+
+        <div class="spinner"></div>
+
+        <div id="loading-text">
+            Чтение CSV...
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+/* ================================================================
+   CONSTANTS
+================================================================ */
+
+const STATUS_VALUES = [
+    "move",
+    "stand",
+    "anomaly"
+];
+
+const DEFAULT_PAGE_SIZE =
+    10000;
+
+const DEFAULT_IS_WATER =
+    false;
+
+const READ_CHUNK_SIZE =
+    4 * 1024 * 1024;
+
+
+/* ================================================================
+   APPLICATION STATE
+================================================================ */
+
+const state = {
+
+    file: null,
+
+    pageSize:
+        DEFAULT_PAGE_SIZE,
+
+    defaultStatus:
+        "anomaly",
+
+    defaultIsWater:
+        DEFAULT_IS_WATER,
+
+    headers: [],
+
+    delimiter: ",",
+
+    numberIndex:
+        -1,
+
+    timeIndex:
+        -1,
+
+    latIndex:
+        -1,
+
+    lonIndex:
+        -1,
+
+    statusIndex:
+        -1,
+
+    waterIndex:
+        -1,
+
+    sourceHasStatus:
+        false,
+
+    sourceHasIsWater:
+        false,
+
+    dataStartOffset:
+        0,
+
+    pageOffsets: [],
+
+    currentPage:
+        -1,
+
+    currentRows: [],
+
+    totalRows:
+        null,
+
+    /*
+     * Пользовательские изменения.
+     *
+     * Каждый override:
+     *
+     * {
+     *     start: number,
+     *     end: number,
+     *     status: "move" | "stand" | "anomaly",
+     *     isWater: boolean
+     * }
+     */
+    overrides: [],
+
+    /*
+     * История для Undo.
+     */
+    undoStack: [],
+
+    maxUndo:
+        100,
+
+    /*
+     * Первая точка выбранного
+     * интервала.
+     */
+    selectionStart:
+        null,
+
+    map: null,
+
+    trackLayer:
+        null,
+
+    markers:
+        new Map(),
+
+    fitMapOnPageLoad:
+        true,
+
+    /*
+     * Строка, на которую был
+     * выполнен переход из карты.
+     */
+    focusedRecordIndex:
+        null
+};
+
+
+/* ================================================================
+   MODAL PENDING STATE
+================================================================ */
+
+let pendingIntervalStart =
+    null;
+
+let pendingIntervalEnd =
+    null;
+
+let pendingIntervalStatus =
+    null;
+
+let pendingIntervalIsWater =
+    null;
+
+
+/* ================================================================
+   DOM
+================================================================ */
+
+const fileInput =
+    document.getElementById(
+        "csv-file"
+    );
+
+const fileNameElement =
+    document.getElementById(
+        "file-name"
+    );
+
+const pageSizeInput =
+    document.getElementById(
+        "page-size"
+    );
+
+const defaultStatusSelect =
+    document.getElementById(
+        "default-status"
+    );
+
+const defaultIsWaterSelect =
+    document.getElementById(
+        "default-is-water"
+    );
+
+const firstPageButton =
+    document.getElementById(
+        "first-page"
+    );
+
+const prevPageButton =
+    document.getElementById(
+        "prev-page"
+    );
+
+const nextPageButton =
+    document.getElementById(
+        "next-page"
+    );
+
+const lastPageButton =
+    document.getElementById(
+        "last-page"
+    );
+
+const pageInfoElement =
+    document.getElementById(
+        "page-info"
+    );
+
+const selectionStatusElement =
+    document.getElementById(
+        "selection-status"
+    );
+
+const cancelSelectionButton =
+    document.getElementById(
+        "cancel-selection"
+    );
+
+const undoButton =
+    document.getElementById(
+        "undo-button"
+    );
+
+const clearCurrentPageButton =
+    document.getElementById(
+        "clear-current-page"
+    );
+
+const clearAllButton =
+    document.getElementById(
+        "clear-all"
+    );
+
+const exportButton =
+    document.getElementById(
+        "export-button"
+    );
+
+const statusMessageElement =
+    document.getElementById(
+        "status-message"
+    );
+
+const pageRowCountElement =
+    document.getElementById(
+        "page-row-count"
+    );
+
+const rowRangeElement =
+    document.getElementById(
+        "row-range"
+    );
+
+const moveCountElement =
+    document.getElementById(
+        "move-count"
+    );
+
+const standCountElement =
+    document.getElementById(
+        "stand-count"
+    );
+
+const anomalyCountElement =
+    document.getElementById(
+        "anomaly-count"
+    );
+
+const waterCountElement =
+    document.getElementById(
+        "water-count"
+    );
+
+const intervalCountElement =
+    document.getElementById(
+        "interval-count"
+    );
+
+const tableHead =
+    document.getElementById(
+        "table-head"
+    );
+
+const tableBody =
+    document.getElementById(
+        "table-body"
+    );
+
+const tableWrapper =
+    document.getElementById(
+        "table-wrapper"
+    );
+
+const loadingOverlay =
+    document.getElementById(
+        "loading-overlay"
+    );
+
+const loadingText =
+    document.getElementById(
+        "loading-text"
+    );
+
+
+/* ================================================================
+   MODAL DOM
+================================================================ */
+
+const intervalModalOverlay =
+    document.getElementById(
+        "interval-modal-overlay"
+    );
+
+const intervalModalDescription =
+    document.getElementById(
+        "interval-modal-description"
+    );
+
+const intervalModalCancel =
+    document.getElementById(
+        "interval-modal-cancel"
+    );
+
+const intervalApplyButton =
+    document.getElementById(
+        "interval-apply"
+    );
+
+const selectedIntervalStatus =
+    document.getElementById(
+        "selected-interval-status"
+    );
+
+const selectedIntervalWater =
+    document.getElementById(
+        "selected-interval-water"
+    );
+
+const intervalStatusButtons =
+    document.querySelectorAll(
+        ".interval-status-button"
+    );
+
+const waterButtons =
+    document.querySelectorAll(
+        ".water-button"
+    );
+
+
+/* ================================================================
+   MAP
+================================================================ */
+
+state.map =
+    L.map(
+        "map"
+    ).setView(
+        [
+            48.447048,
+            44.408684
+        ],
+        13
+    );
+
+
+const osmLayer =
+    L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            attribution:
+                '&copy; <a href="https://www.openstreetmap.org/copyright">' +
+                'OpenStreetMap</a> contributors'
+        }
+    ).addTo(
+        state.map
+    );
+
+
+const satelliteLayer =
+    L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/" +
+        "World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+            attribution:
+                "Tiles &copy; Esri"
+        }
+    );
+
+
+const terrainLayer =
+    L.tileLayer(
+        "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+        {
+            attribution:
+                "Map data: &copy; OpenStreetMap contributors"
+        }
+    );
+
+
+L.control
+    .layers(
+        {
+            "OpenStreetMap":
+                osmLayer,
+
+            "Спутник":
+                satelliteLayer,
+
+            "Рельеф":
+                terrainLayer
+        }
+    )
+    .addTo(
+        state.map
+    );
+
+
+state.trackLayer =
+    L.featureGroup()
+        .addTo(
+            state.map
+        );
+
+
+/* ================================================================
+   UI HELPERS
+================================================================ */
+
+function setStatus(
+    message,
+    type = ""
+) {
+
+    statusMessageElement.textContent =
+        message;
+
+    statusMessageElement.className =
+        "status-message";
+
+    if (type) {
+
+        statusMessageElement.classList.add(
+            type
+        );
+    }
+}
+
+
+function showLoading(
+    message
+) {
+
+    loadingText.textContent =
+        message;
+
+    loadingOverlay.classList.add(
+        "visible"
+    );
+}
+
+
+function hideLoading() {
+
+    loadingOverlay.classList.remove(
+        "visible"
+    );
+}
+
+
+/* ================================================================
+   CSV
+================================================================ */
+
+function parseCSVLine(
+    line,
+    delimiter
+) {
+
+    const result = [];
+
+    let current = "";
+
+    let inQuotes = false;
+
+
+    for (
+        let i = 0;
+        i < line.length;
+        i++
+    ) {
+
+        const char =
+            line[i];
+
+
+        if (
+            char === '"'
+        ) {
+
+            if (
+                inQuotes &&
+                line[i + 1] === '"'
+            ) {
+
+                current += '"';
+
+                i++;
+
+            } else {
+
+                inQuotes =
+                    !inQuotes;
+            }
+
+            continue;
+        }
+
+
+        if (
+            char === delimiter &&
+            !inQuotes
+        ) {
+
+            result.push(
+                current
+            );
+
+            current = "";
+
+            continue;
+        }
+
+
+        current +=
+            char;
+    }
+
+
+    result.push(
+        current
+    );
+
+
+    return result;
+}
+
+
+function escapeCSVField(
+    value,
+    delimiter
+) {
+
+    if (
+        value === null ||
+        value === undefined
+    ) {
+
+        return "";
+    }
+
+
+    const str =
+        String(value);
+
+
+    if (
+        str.includes('"') ||
+        str.includes("\n") ||
+        str.includes("\r") ||
+        str.includes(delimiter)
+    ) {
+
+        return '"' +
+            str.replace(
+                /"/g,
+                '""'
+            ) +
+            '"';
+    }
+
+
+    return str;
+}
+
+
+function detectDelimiter(
+    line
+) {
+
+    const candidates = [
+        ",",
+        ";",
+        "\t"
+    ];
+
+
+    let best =
+        candidates[0];
+
+    let bestCount =
+        -1;
+
+
+    for (
+        const delimiter
+        of candidates
+    ) {
+
+        const fields =
+            parseCSVLine(
+                line,
+                delimiter
+            );
+
+
+        if (
+            fields.length >
+            bestCount
+        ) {
+
+            best =
+                delimiter;
+
+            bestCount =
+                fields.length;
+        }
+    }
+
+
+    return best;
+}
+
+
+function findColumn(
+    variants,
+    headers
+) {
+
+    const normalized =
+        headers.map(
+            value =>
+                value
+                    .trim()
+                    .toLowerCase()
+        );
+
+
+    for (
+        const variant
+        of variants
+    ) {
+
+        const index =
+            normalized.indexOf(
+                variant.toLowerCase()
+            );
+
+
+        if (
+            index !== -1
+        ) {
+
+            return index;
+        }
+    }
+
+
+    return -1;
+}
+
+
+/* ================================================================
+   STATUS PARSING
+================================================================ */
+
+function getSourceStatus(
+    fields
+) {
+
+    if (
+        state.statusIndex === -1
+    ) {
+
+        return state.defaultStatus;
+    }
+
+
+    const value =
+        (
+            fields[
+                state.statusIndex
+            ] ?? ""
+        )
+            .trim()
+            .toLowerCase();
+
+
+    if (!value) {
+
+        return state.defaultStatus;
+    }
+
+
+    if (
+        STATUS_VALUES.includes(
+            value
+        )
+    ) {
+
+        return value;
+    }
+
+
+    return state.defaultStatus;
+}
+
+
+/* ================================================================
+   IS_WATER PARSING
+================================================================ */
+
+/*
+ * Внутри приложения isWater всегда boolean.
+ *
+ * Поддерживаем при чтении:
+ *
+ * true
+ * false
+ * 1
+ * 0
+ * yes
+ * no
+ *
+ * Но наружу при экспорте пишем
+ * только true / false.
+ */
+function parseBoolean(
+    value,
+    defaultValue
+) {
+
+    if (
+        value === null ||
+        value === undefined
+    ) {
+
+        return defaultValue;
+    }
+
+
+    const normalized =
+        String(value)
+            .trim()
+            .toLowerCase();
+
+
+    if (!normalized) {
+
+        return defaultValue;
+    }
+
+
+    if (
+        normalized === "true" ||
+        normalized === "1" ||
+        normalized === "yes"
+    ) {
+
+        return true;
+    }
+
+
+    if (
+        normalized === "false" ||
+        normalized === "0" ||
+        normalized === "no"
+    ) {
+
+        return false;
+    }
+
+
+    return defaultValue;
+}
+
+
+function getSourceIsWater(
+    fields
+) {
+
+    if (
+        state.waterIndex === -1
+    ) {
+
+        return state.defaultIsWater;
+    }
+
+
+    return parseBoolean(
+        fields[
+            state.waterIndex
+        ],
+        state.defaultIsWater
+    );
+}
+
+
+/* ================================================================
+   EFFECTIVE VALUES
+================================================================ */
+
+function getEffectiveStatus(
+    recordIndex,
+    sourceStatus
+) {
+
+    for (
+        let i =
+            state.overrides.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const override =
+            state.overrides[i];
+
+
+        if (
+            recordIndex >=
+                override.start &&
+            recordIndex <=
+                override.end
+        ) {
+
+            if (
+                override.status !==
+                undefined
+            ) {
+
+                return override.status;
+            }
+        }
+    }
+
+
+    return sourceStatus;
+}
+
+
+function getEffectiveIsWater(
+    recordIndex,
+    sourceIsWater
+) {
+
+    for (
+        let i =
+            state.overrides.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const override =
+            state.overrides[i];
+
+
+        if (
+            recordIndex >=
+                override.start &&
+            recordIndex <=
+                override.end
+        ) {
+
+            if (
+                override.isWater !==
+                    undefined &&
+                override.isWater !==
+                    null
+            ) {
+
+                return Boolean(
+                    override.isWater
+                );
+            }
+        }
+    }
+
+
+    return Boolean(
+        sourceIsWater
+    );
+}
+
+
+/* ================================================================
+   FILE INITIALIZATION
+================================================================ */
+
+fileInput.addEventListener(
+    "change",
+    async function(event) {
+
+        const file =
+            event.target.files[0];
+
+
+        if (!file) {
+
+            return;
+        }
+
+
+        try {
+
+            await initializeFile(
+                file
+            );
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                error
+            );
+
+            hideLoading();
+
+            setStatus(
+                error.message,
+                "error"
+            );
+        }
+    }
+);
+
+
+async function initializeFile(
+    file
+) {
+
+    showLoading(
+        "Чтение заголовка CSV..."
+    );
+
+
+    state.file =
+        file;
+
+
+    state.pageSize =
+        Math.max(
+            100,
+            Number(
+                pageSizeInput.value
+            ) ||
+            DEFAULT_PAGE_SIZE
+        );
+
+
+    state.defaultStatus =
+        defaultStatusSelect.value;
+
+
+    state.defaultIsWater =
+        defaultIsWaterSelect.value ===
+        "true";
+
+
+    state.headers =
+        [];
+
+
+    state.delimiter =
+        ",";
+
+
+    state.numberIndex =
+        -1;
+
+    state.timeIndex =
+        -1;
+
+    state.latIndex =
+        -1;
+
+    state.lonIndex =
+        -1;
+
+    state.statusIndex =
+        -1;
+
+    state.waterIndex =
+        -1;
+
+    state.sourceHasStatus =
+        false;
+
+    state.sourceHasIsWater =
+        false;
+
+    state.dataStartOffset =
+        0;
+
+    state.pageOffsets =
+        [];
+
+    state.totalRows =
+        null;
+
+    state.currentPage =
+        -1;
+
+    state.currentRows =
+        [];
+
+    state.overrides =
+        [];
+
+    state.undoStack =
+        [];
+
+    state.selectionStart =
+        null;
+
+    state.focusedRecordIndex =
+        null;
+
+    state.fitMapOnPageLoad =
+        true;
+
+
+    const headerBlob =
+        file.slice(
+            0,
+            Math.min(
+                file.size,
+                1024 * 1024
+            )
+        );
+
+
+    const headerText =
+        await headerBlob.text();
+
+
+    const firstNewline =
+        headerText.indexOf(
+            "\n"
+        );
+
+
+    if (
+        firstNewline === -1
+    ) {
+
+        throw new Error(
+            "В CSV отсутствует заголовок."
+        );
+    }
+
+
+    let headerLine =
+        headerText.slice(
+            0,
+            firstNewline
+        );
+
+
+    if (
+        headerLine.endsWith(
+            "\r"
+        )
+    ) {
+
+        headerLine =
+            headerLine.slice(
+                0,
+                -1
+            );
+    }
+
+
+    state.delimiter =
+        detectDelimiter(
+            headerLine
+        );
+
+
+    state.headers =
+        parseCSVLine(
+            headerLine,
+            state.delimiter
+        ).map(
+            value =>
+                value.trim()
+        );
+
+
+    /*
+     * Первый столбец —
+     * исходный номер записи.
+     */
+    state.numberIndex =
+        0;
+
+
+    state.timeIndex =
+        findColumn(
+            [
+                "time",
+                "timestamp",
+                "datetime",
+                "date"
+            ],
+            state.headers
+        );
+
+
+    state.latIndex =
+        findColumn(
+            [
+                "lat",
+                "latitude"
+            ],
+            state.headers
+        );
+
+
+    state.lonIndex =
+        findColumn(
+            [
+                "lon",
+                "lng",
+                "longitude"
+            ],
+            state.headers
+        );
+
+
+    state.statusIndex =
+        findColumn(
+            [
+                "status"
+            ],
+            state.headers
+        );
+
+
+    state.waterIndex =
+        findColumn(
+            [
+                "is_water",
+                "water"
+            ],
+            state.headers
+        );
+
+
+    state.sourceHasStatus =
+        state.statusIndex !== -1;
+
+
+    state.sourceHasIsWater =
+        state.waterIndex !== -1;
+
+
+    if (
+        state.timeIndex === -1
+    ) {
+
+        throw new Error(
+            "Не найдена колонка time."
+        );
+    }
+
+
+    if (
+        state.latIndex === -1
+    ) {
+
+        throw new Error(
+            "Не найдена колонка lat."
+        );
+    }
+
+
+    if (
+        state.lonIndex === -1
+    ) {
+
+        throw new Error(
+            "Не найдена колонка lon."
+        );
+    }
+
+
+    const headerWithNewline =
+        headerText.slice(
+            0,
+            firstNewline + 1
+        );
+
+
+    state.dataStartOffset =
+        new TextEncoder()
+            .encode(
+                headerWithNewline
+            )
+            .length;
+
+
+    state.pageOffsets[0] =
+        state.dataStartOffset;
+
+
+    fileNameElement.textContent =
+        `${file.name} (${formatBytes(file.size)})`;
+
+
+    renderTableHeader();
+
+
+    clearMap();
+
+
+    await loadPage(
+        0
+    );
+
+
+    exportButton.disabled =
+        false;
+
+
+    clearAllButton.disabled =
+        false;
+
+
+    clearCurrentPageButton.disabled =
+        false;
+
+
+    setStatus(
+        state.sourceHasStatus ||
+        state.sourceHasIsWater
+            ? "CSV загружен. Исходная разметка сохранена."
+            : "CSV загружен. Отсутствующие поля будут заполнены значениями по умолчанию.",
+        "success"
+    );
+
+
+    hideLoading();
+}
+
+
+/* ================================================================
+   PAGE READER
+================================================================ */
+
+async function readPage(
+    startOffset,
+    pageNumber
+) {
+
+    const rows = [];
+
+    let pending = "";
+
+    let byteOffset =
+        startOffset;
+
+
+    const decoder =
+        new TextDecoder(
+            "utf-8"
+        );
+
+
+    while (
+        rows.length <
+            state.pageSize &&
+        byteOffset <
+            state.file.size
+    ) {
+
+        const end =
+            Math.min(
+                byteOffset +
+                    READ_CHUNK_SIZE,
+                state.file.size
+            );
+
+
+        const blob =
+            state.file.slice(
+                byteOffset,
+                end
+            );
+
+
+        const arrayBuffer =
+            await blob.arrayBuffer();
+
+
+        const text =
+            decoder.decode(
+                arrayBuffer,
+                {
+                    stream:
+                        end <
+                        state.file.size
+                }
+            );
+
+
+        byteOffset =
+            end;
+
+
+        pending +=
+            text;
+
+
+        let newlineIndex;
+
+
+        while (
+            rows.length <
+                state.pageSize &&
+            (
+                newlineIndex =
+                    pending.indexOf(
+                        "\n"
+                    )
+            ) !== -1
+        ) {
+
+            let line =
+                pending.slice(
+                    0,
+                    newlineIndex
+                );
+
+
+            pending =
+                pending.slice(
+                    newlineIndex + 1
+                );
+
+
+            if (
+                line.endsWith(
+                    "\r"
+                )
+            ) {
+
+                line =
+                    line.slice(
+                        0,
+                        -1
+                    );
+            }
+
+
+            if (
+                !line.trim()
+            ) {
+
+                continue;
+            }
+
+
+            const fields =
+                parseCSVLine(
+                    line,
+                    state.delimiter
+                );
+
+
+            const recordIndex =
+                pageNumber *
+                    state.pageSize +
+                rows.length;
+
+
+            const sourceStatus =
+                getSourceStatus(
+                    fields
+                );
+
+
+            const sourceIsWater =
+                getSourceIsWater(
+                    fields
+                );
+
+
+            const status =
+                getEffectiveStatus(
+                    recordIndex,
+                    sourceStatus
+                );
+
+
+            const isWater =
+                getEffectiveIsWater(
+                    recordIndex,
+                    sourceIsWater
+                );
+
+
+            rows.push(
+                {
+                    recordIndex,
+
+                    fields,
+
+                    sourceStatus,
+
+                    sourceIsWater,
+
+                    status,
+
+                    isWater
+                }
+            );
+        }
+    }
+
+
+    let nextOffset;
+
+
+    if (
+        pending.length > 0 &&
+        rows.length >=
+            state.pageSize
+    ) {
+
+        const pendingBytes =
+            new TextEncoder()
+                .encode(
+                    pending
+                )
+                .length;
+
+
+        nextOffset =
+            byteOffset -
+            pendingBytes;
+
+    } else {
+
+        nextOffset =
+            byteOffset;
+    }
+
+
+    return {
+
+        rows,
+
+        nextOffset,
+
+        eof:
+            nextOffset >=
+            state.file.size
+    };
+}
+
+
+/* ================================================================
+   LOAD PAGE
+================================================================ */
+
+async function loadPage(
+    pageNumber
+) {
+
+    if (
+        !state.file
+    ) {
+
+        return;
+    }
+
+
+    showLoading(
+        `Загрузка страницы ${pageNumber + 1}...`
+    );
+
+
+    try {
+
+        let offset =
+            state.pageOffsets[
+                pageNumber
+            ];
+
+
+        if (
+            offset === undefined
+        ) {
+
+            let knownPage =
+                state.pageOffsets.length -
+                1;
+
+
+            if (
+                knownPage < 0
+            ) {
+
+                knownPage = 0;
+            }
+
+
+            offset =
+                state.pageOffsets[
+                    knownPage
+                ];
+
+
+            while (
+                knownPage <
+                pageNumber
+            ) {
+
+                const result =
+                    await readPage(
+                        offset,
+                        knownPage
+                    );
+
+
+                state.pageOffsets[
+                    knownPage + 1
+                ] =
+                    result.nextOffset;
+
+
+                offset =
+                    result.nextOffset;
+
+
+                if (
+                    result.rows.length <
+                    state.pageSize
+                ) {
+
+                    state.totalRows =
+                        knownPage *
+                            state.pageSize +
+                        result.rows.length;
+
+                    break;
+                }
+
+
+                knownPage++;
+            }
+        }
+
+
+        const result =
+            await readPage(
+                offset,
+                pageNumber
+            );
+
+
+        state.currentRows =
+            result.rows;
+
+
+        state.currentPage =
+            pageNumber;
+
+
+        if (
+            result.rows.length >=
+            state.pageSize
+        ) {
+
+            state.pageOffsets[
+                pageNumber + 1
+            ] =
+                result.nextOffset;
+
+        } else {
+
+            state.totalRows =
+                pageNumber *
+                    state.pageSize +
+                result.rows.length;
+        }
+
+
+        renderCurrentPage();
+
+        updateNavigation();
+
+        updateSelectionUI();
+
+    } finally {
+
+        hideLoading();
+    }
+}
+
+
+/* ================================================================
+   CURRENT PAGE RENDER
+================================================================ */
+
+function renderCurrentPage() {
+
+    renderTable();
+
+    renderMap();
+
+    updateStatistics();
+
+    updateUndoButton();
+}
+
+
+/* ================================================================
+   TABLE HEADER
+================================================================ */
+
+function renderTableHeader() {
+
+    tableHead.innerHTML =
+        "";
+
+
+    const numberTh =
+        document.createElement(
+            "th"
+        );
+
+
+    numberTh.textContent =
+        state.headers[
+            state.numberIndex
+        ] || "#";
+
+
+    tableHead.appendChild(
+        numberTh
+    );
+
+
+    state.headers.forEach(
+        function(
+            header,
+            index
+        ) {
+
+            if (
+                index ===
+                state.numberIndex
+            ) {
+
+                return;
+            }
+
+
+            /*
+             * status и is_water
+             * рисуем отдельно
+             * интерактивными.
+             */
+            if (
+                index ===
+                    state.statusIndex ||
+                index ===
+                    state.waterIndex
+            ) {
+
+                return;
+            }
+
+
+            const th =
+                document.createElement(
+                    "th"
+                );
+
+
+            th.textContent =
+                header;
+
+
+            tableHead.appendChild(
+                th
+            );
+        }
+    );
+
+
+    const statusTh =
+        document.createElement(
+            "th"
+        );
+
+
+    statusTh.textContent =
+        "status";
+
+
+    tableHead.appendChild(
+        statusTh
+    );
+
+
+    const waterTh =
+        document.createElement(
+            "th"
+        );
+
+
+    waterTh.textContent =
+        "is_water";
+
+
+    tableHead.appendChild(
+        waterTh
+    );
+}
+
+
+/* ================================================================
+   TABLE
+================================================================ */
+
+function renderTable() {
+
+    tableBody.innerHTML =
+        "";
+
+
+    for (
+        const row
+        of state.currentRows
+    ) {
+
+        const tr =
+            document.createElement(
+                "tr"
+            );
+
+
+        if (
+            state.selectionStart &&
+            state.selectionStart.recordIndex ===
+                row.recordIndex
+        ) {
+
+            tr.classList.add(
+                "selected-row"
+            );
+        }
+
+
+        if (
+            state.focusedRecordIndex !==
+                null &&
+            state.focusedRecordIndex ===
+                row.recordIndex
+        ) {
+
+            tr.classList.add(
+                "map-focused-row"
+            );
+        }
+
+
+        /*
+         * Обычный клик.
+         */
+        tr.addEventListener(
+            "click",
+            function() {
+
+                selectRow(
+                    row.recordIndex
+                );
+            }
+        );
+
+
+        /*
+         * Двойной клик:
+         *
+         * 1. выбор точки;
+         * 2. zoom карты;
+         * 3. подсветка точки.
+         */
+        tr.addEventListener(
+            "dblclick",
+            function(event) {
+
+                event.stopPropagation();
+
+
+                selectRow(
+                    row.recordIndex
+                );
+
+
+                focusMapPoint(
+                    row.recordIndex,
+                    true
+                );
+            }
+        );
+
+
+        /*
+         * Номер.
+         */
+        const numberTd =
+            document.createElement(
+                "td"
+            );
+
+
+        numberTd.textContent =
+            row.fields[
+                state.numberIndex
+            ] ??
+            (
+                row.recordIndex + 1
+            );
+
+
+        tr.appendChild(
+            numberTd
+        );
+
+
+        /*
+         * Остальные исходные поля.
+         */
+        state.headers.forEach(
+            function(
+                header,
+                index
+            ) {
+
+                if (
+                    index ===
+                    state.numberIndex
+                ) {
+
+                    return;
+                }
+
+
+                if (
+                    index ===
+                        state.statusIndex ||
+                    index ===
+                        state.waterIndex
+                ) {
+
+                    return;
+                }
+
+
+                const td =
+                    document.createElement(
+                        "td"
+                    );
+
+
+                td.textContent =
+                    row.fields[
+                        index
+                    ] ?? "";
+
+
+                tr.appendChild(
+                    td
+                );
+            }
+        );
+
+
+        /*
+         * STATUS.
+         */
+        const statusTd =
+            document.createElement(
+                "td"
+            );
+
+
+        const statusSelect =
+            document.createElement(
+                "select"
+            );
+
+
+        statusSelect.className =
+            `status-select ${row.status}`;
+
+
+        for (
+            const status
+            of STATUS_VALUES
+        ) {
+
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+
+            option.value =
+                status;
+
+
+            option.textContent =
+                status;
+
+
+            option.selected =
+                status ===
+                row.status;
+
+
+            statusSelect.appendChild(
+                option
+            );
+        }
+
+
+        statusSelect.addEventListener(
+            "click",
+            event => {
+                event.stopPropagation();
+            }
+        );
+
+
+        statusSelect.addEventListener(
+            "dblclick",
+            event => {
+                event.stopPropagation();
+            }
+        );
+
+
+        statusSelect.addEventListener(
+            "change",
+            function(event) {
+
+                event.stopPropagation();
+
+
+                setPointStatus(
+                    row.recordIndex,
+                    statusSelect.value
+                );
+            }
+        );
+
+
+        statusTd.appendChild(
+            statusSelect
+        );
+
+
+        tr.appendChild(
+            statusTd
+        );
+
+
+        /*
+         * IS_WATER.
+         *
+         * Внутри модели это boolean.
+         */
+        const waterTd =
+            document.createElement(
+                "td"
+            );
+
+
+        const waterSelect =
+            document.createElement(
+                "select"
+            );
+
+
+        waterSelect.className =
+            `water-select ${
+                row.isWater
+                    ? "true"
+                    : "false"
+            }`;
+
+
+        const falseOption =
+            document.createElement(
+                "option"
+            );
+
+
+        falseOption.value =
+            "false";
+
+
+        falseOption.textContent =
+            "false";
+
+
+        falseOption.selected =
+            row.isWater === false;
+
+
+        waterSelect.appendChild(
+            falseOption
+        );
+
+
+        const trueOption =
+            document.createElement(
+                "option"
+            );
+
+
+        trueOption.value =
+            "true";
+
+
+        trueOption.textContent =
+            "true";
+
+
+        trueOption.selected =
+            row.isWater === true;
+
+
+        waterSelect.appendChild(
+            trueOption
+        );
+
+
+        waterSelect.addEventListener(
+            "click",
+            event => {
+                event.stopPropagation();
+            }
+        );
+
+
+        waterSelect.addEventListener(
+            "dblclick",
+            event => {
+                event.stopPropagation();
+            }
+        );
+
+
+        waterSelect.addEventListener(
+            "change",
+            function(event) {
+
+                event.stopPropagation();
+
+
+                setPointIsWater(
+                    row.recordIndex,
+                    waterSelect.value ===
+                        "true"
+                );
+            }
+        );
+
+
+        waterTd.appendChild(
+            waterSelect
+        );
+
+
+        tr.appendChild(
+            waterTd
+        );
+
+
+        tableBody.appendChild(
+            tr
+        );
+    }
+}
+
+
+/* ================================================================
+   MAP
+================================================================ */
+
+function clearMap() {
+
+    state.trackLayer.clearLayers();
+
+    state.markers.clear();
+}
+
+
+function renderMap() {
+
+    clearMap();
+
+
+    if (
+        state.currentRows.length ===
+        0
+    ) {
+
+        return;
+    }
+
+
+    const bounds = [];
+
+
+    for (
+        const row
+        of state.currentRows
+    ) {
+
+        const lat =
+            parseFloat(
+                row.fields[
+                    state.latIndex
+                ]
+            );
+
+
+        const lon =
+            parseFloat(
+                row.fields[
+                    state.lonIndex
+                ]
+            );
+
+
+        if (
+            !Number.isFinite(lat) ||
+            !Number.isFinite(lon)
+        ) {
+
+            continue;
+        }
+
+
+        const marker =
+            L.circleMarker(
+                [
+                    lat,
+                    lon
+                ],
+                getMarkerStyle(
+                    row
+                )
+            );
+
+
+        marker.bindTooltip(
+            createTooltip(
+                row
+            ),
+            {
+                direction:
+                    "top"
+            }
+        );
+
+
+        /*
+         * Одинарный клик:
+         * выбор точки интервала.
+         */
+        marker.on(
+            "click",
+            function(event) {
+
+                L.DomEvent.stopPropagation(
+                    event
+                );
+
+
+                selectRow(
+                    row.recordIndex
+                );
+            }
+        );
+
+
+        /*
+         * Двойной клик:
+         *
+         * выбор,
+         * таблица,
+         * zoom карты.
+         */
+        marker.on(
+            "dblclick",
+            function(event) {
+
+                L.DomEvent.stopPropagation(
+                    event
+                );
+
+
+                L.DomEvent.preventDefault(
+                    event
+                );
+
+
+                selectRow(
+                    row.recordIndex
+                );
+
+
+                focusTableRow(
+                    row.recordIndex
+                );
+
+
+                focusMapPoint(
+                    row.recordIndex,
+                    true
+                );
+            }
+        );
+
+
+        marker.addTo(
+            state.trackLayer
+        );
+
+
+        state.markers.set(
+            row.recordIndex,
+            marker
+        );
+
+
+        bounds.push(
+            [
+                lat,
+                lon
+            ]
+        );
+    }
+
+
+    if (
+        state.fitMapOnPageLoad &&
+        bounds.length > 0
+    ) {
+
+        state.map.fitBounds(
+            bounds,
+            {
+                padding:
+                    [30, 30],
+
+                maxZoom:
+                    17
+            }
+        );
+
+
+        state.fitMapOnPageLoad =
+            false;
+    }
+}
+
+
+/* ================================================================
+   MAP FOCUS
+================================================================ */
+
+function focusMapPoint(
+    recordIndex,
+    zoom = true
+) {
+
+    const row =
+        state.currentRows.find(
+            item =>
+                item.recordIndex ===
+                recordIndex
+        );
+
+
+    if (!row) {
+
+        return;
+    }
+
+
+    const lat =
+        parseFloat(
+            row.fields[
+                state.latIndex
+            ]
+        );
+
+
+    const lon =
+        parseFloat(
+            row.fields[
+                state.lonIndex
+            ]
+        );
+
+
+    if (
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lon)
+    ) {
+
+        setStatus(
+            "У строки отсутствуют корректные координаты.",
+            "error"
+        );
+
+        return;
+    }
+
+
+    const targetZoom =
+        zoom
+            ? Math.min(
+                Math.max(
+                    state.map.getZoom(),
+                    17
+                ) + 2,
+                20
+            )
+            : Math.max(
+                state.map.getZoom(),
+                17
+            );
+
+
+    state.map.setView(
+        [
+            lat,
+            lon
+        ],
+        targetZoom,
+        {
+            animate:
+                true
+        }
+    );
+
+
+    const marker =
+        state.markers.get(
+            recordIndex
+        );
+
+
+    if (!marker) {
+
+        return;
+    }
+
+
+    const normalStyle =
+        getMarkerStyle(
+            row
+        );
+
+
+    marker.setStyle(
+        {
+            radius: 9,
+
+            weight: 3,
+
+            color: "#ff6f00",
+
+            fillColor: "#ff9800",
+
+            fillOpacity: 1
+        }
+    );
+
+
+    marker.openTooltip();
+
+
+    setTimeout(
+        function() {
+
+            if (
+                state.markers.has(
+                    recordIndex
+                )
+            ) {
+
+                marker.setStyle(
+                    normalStyle
+                );
+            }
+
+        },
+        1500
+    );
+}
+
+
+/* ================================================================
+   TABLE FOCUS
+================================================================ */
+
+function focusTableRow(
+    recordIndex
+) {
+
+    const row =
+        state.currentRows.find(
+            item =>
+                item.recordIndex ===
+                recordIndex
+        );
+
+
+    if (!row) {
+
+        return;
+    }
+
+
+    state.focusedRecordIndex =
+        recordIndex;
+
+
+    renderTable();
+
+
+    const rows =
+        tableBody.querySelectorAll(
+            "tr"
+        );
+
+
+    const localIndex =
+        state.currentRows.findIndex(
+            item =>
+                item.recordIndex ===
+                recordIndex
+        );
+
+
+    if (
+        localIndex >= 0 &&
+        rows[localIndex]
+    ) {
+
+        rows[
+            localIndex
+        ].scrollIntoView(
+            {
+                behavior:
+                    "smooth",
+
+                block:
+                    "center"
+            }
+        );
+    }
+
+
+    setStatus(
+        `Таблица перемещена к строке ${recordIndex + 1}.`,
+        "success"
+    );
+
+
+    setTimeout(
+        function() {
+
+            if (
+                state.focusedRecordIndex ===
+                recordIndex
+            ) {
+
+                state.focusedRecordIndex =
+                    null;
+
+                renderTable();
+            }
+
+        },
+        2000
+    );
+}
+
+
+/* ================================================================
+   MARKER STYLE
+================================================================ */
+
+function getMarkerStyle(
+    row
+) {
+
+    let color;
+
+    let fillColor;
+
+
+    switch (
+        row.status
+    ) {
+
+        case "move":
+
+            color =
+                "#1b5e20";
+
+            fillColor =
+                "#43a047";
+
+            break;
+
+
+        case "stand":
+
+            color =
+                "#0d47a1";
+
+            fillColor =
+                "#1976d2";
+
+            break;
+
+
+        case "anomaly":
+
+        default:
+
+            color =
+                "#b71c1c";
+
+            fillColor =
+                "#e53935";
+
+            break;
+    }
+
+
+    const selected =
+        state.selectionStart &&
+        state.selectionStart.recordIndex ===
+            row.recordIndex;
+
+
+    if (selected) {
+
+        return {
+
+            radius: 7,
+
+            weight: 3,
+
+            color:
+                "#e65100",
+
+            fillColor:
+                "#ff9800",
+
+            fillOpacity:
+                1
+        };
+    }
+
+
+    return {
+
+        radius: 3,
+
+        weight: 1,
+
+        color,
+
+        fillColor,
+
+        fillOpacity:
+            0.75
+    };
+}
+
+
+/* ================================================================
+   TOOLTIP
+================================================================ */
+
+function createTooltip(
+    row
+) {
+
+    const number =
+        row.fields[
+            state.numberIndex
+        ] ??
+        (
+            row.recordIndex + 1
+        );
+
+
+    const time =
+        row.fields[
+            state.timeIndex
+        ] ??
+        "";
+
+
+    const lat =
+        row.fields[
+            state.latIndex
+        ] ??
+        "";
+
+
+    const lon =
+        row.fields[
+            state.lonIndex
+        ] ??
+        "";
+
+
+    return `
+        <b>CSV row:</b>
+        ${escapeHtml(number)}
+        <br>
+
+        <b>Индекс:</b>
+        ${row.recordIndex + 1}
+        <br>
+
+        <b>time:</b>
+        ${escapeHtml(time)}
+        <br>
+
+        <b>lat:</b>
+        ${escapeHtml(lat)}
+        <br>
+
+        <b>lon:</b>
+        ${escapeHtml(lon)}
+        <br>
+
+        <b>status:</b>
+        ${escapeHtml(row.status)}
+        <br>
+
+        <b>is_water:</b>
+        ${row.isWater ? "true" : "false"}
+    `;
+}
+
+
+/* ================================================================
+   POINT SELECTION
+================================================================ */
+
+function selectRow(
+    recordIndex
+) {
+
+    if (
+        !state.selectionStart
+    ) {
+
+        const row =
+            state.currentRows.find(
+                item =>
+                    item.recordIndex ===
+                    recordIndex
+            );
+
+
+        if (!row) {
+
+            return;
+        }
+
+
+        state.selectionStart =
+            {
+                recordIndex,
+
+                csvNumber:
+                    row.fields[
+                        state.numberIndex
+                    ] ??
+                    recordIndex + 1
+            };
+
+
+        updateSelectionUI();
+
+        renderTable();
+
+        updateMarkerStyles();
+
+
+        setStatus(
+            "Первая точка выбрана. Выберите конечную точку.",
+            "warning"
+        );
+
+
+        return;
+    }
+
+
+    if (
+        state.selectionStart.recordIndex ===
+        recordIndex
+    ) {
+
+        cancelSelection();
+
+        return;
+    }
+
+
+    const start =
+        state.selectionStart.recordIndex;
+
+
+    const end =
+        recordIndex;
+
+
+    const intervalStart =
+        Math.min(
+            start,
+            end
+        );
+
+
+    const intervalEnd =
+        Math.max(
+            start,
+            end
+        );
+
+
+    openIntervalStatusModal(
+        intervalStart,
+        intervalEnd
+    );
+}
+
+
+/* ================================================================
+   INTERVAL MODAL
+================================================================ */
+
+function openIntervalStatusModal(
+    start,
+    end
+) {
+
+    pendingIntervalStart =
+        start;
+
+    pendingIntervalEnd =
+        end;
+
+    pendingIntervalStatus =
+        null;
+
+    pendingIntervalIsWater =
+        null;
+
+
+    intervalModalDescription.innerHTML =
+        `
+        Выбран интервал:
+        <b>${start + 1}</b>
+        —
+        <b>${end + 1}</b>
+
+        <br><br>
+
+        Выберите тип участка и значение is_water.
+        `;
+
+
+    selectedIntervalStatus.textContent =
+        "не выбран";
+
+
+    selectedIntervalWater.textContent =
+        "не выбран";
+
+
+    intervalApplyButton.disabled =
+        true;
+
+
+    intervalStatusButtons.forEach(
+        button => {
+
+            button.classList.remove(
+                "selected"
+            );
+        }
+    );
+
+
+    waterButtons.forEach(
+        button => {
+
+            button.classList.remove(
+                "selected"
+            );
+        }
+    );
+
+
+    intervalModalOverlay.classList.add(
+        "visible"
+    );
+}
+
+
+/*
+ * Выбор status.
+ */
+intervalStatusButtons.forEach(
+    button => {
+
+        button.addEventListener(
+            "click",
+            function() {
+
+                const status =
+                    button.dataset.status;
+
+
+                if (
+                    !STATUS_VALUES.includes(
+                        status
+                    )
+                ) {
+
+                    return;
+                }
+
+
+                pendingIntervalStatus =
+                    status;
+
+
+                intervalStatusButtons.forEach(
+                    item => {
+
+                        item.classList.remove(
+                            "selected"
+                        );
+                    }
+                );
+
+
+                button.classList.add(
+                    "selected"
+                );
+
+
+                selectedIntervalStatus.textContent =
+                    status;
+
+
+                updateIntervalApplyButton();
+            }
+        );
+    }
+);
+
+
+/*
+ * Выбор is_water.
+ *
+ * Внутри состояния обязательно boolean.
+ */
+waterButtons.forEach(
+    button => {
+
+        button.addEventListener(
+            "click",
+            function() {
+
+                const isWater =
+                    button.dataset.water ===
+                    "true";
+
+
+                pendingIntervalIsWater =
+                    isWater;
+
+
+                waterButtons.forEach(
+                    item => {
+
+                        item.classList.remove(
+                            "selected"
+                        );
+                    }
+                );
+
+
+                button.classList.add(
+                    "selected"
+                );
+
+
+                selectedIntervalWater.textContent =
+                    isWater
+                        ? "true"
+                        : "false";
+
+
+                updateIntervalApplyButton();
+            }
+        );
+    }
+);
+
+
+function updateIntervalApplyButton() {
+
+    intervalApplyButton.disabled =
+        pendingIntervalStatus === null ||
+        pendingIntervalIsWater === null;
+}
+
+
+/*
+ * Применить интервал.
+ */
+intervalApplyButton.addEventListener(
+    "click",
+    function() {
+
+        if (
+            pendingIntervalStart === null ||
+            pendingIntervalEnd === null ||
+            pendingIntervalStatus === null ||
+            pendingIntervalIsWater === null
+        ) {
+
+            return;
+        }
+
+
+        const start =
+            pendingIntervalStart;
+
+
+        const end =
+            pendingIntervalEnd;
+
+
+        const status =
+            pendingIntervalStatus;
+
+
+        const isWater =
+            Boolean(
+                pendingIntervalIsWater
+            );
+
+
+        pushUndo(
+            `Разметка ${start + 1}–${end + 1}: ` +
+            `${status}, is_water=${isWater}`
+        );
+
+
+        addOverride(
+            start,
+            end,
+            status,
+            isWater
+        );
+
+
+        closeIntervalStatusModal();
+
+
+        state.selectionStart =
+            null;
+
+
+        refreshCurrentRows();
+
+        renderCurrentPage();
+
+        updateSelectionUI();
+
+
+        setStatus(
+            `Интервал ${start + 1}–${end + 1}: ` +
+            `${status}, is_water=${isWater}.`,
+            "success"
+        );
+    }
+);
+
+
+/*
+ * Закрытие modal.
+ */
+intervalModalCancel.addEventListener(
+    "click",
+    closeIntervalStatusModal
+);
+
+
+intervalModalOverlay.addEventListener(
+    "click",
+    function(event) {
+
+        if (
+            event.target ===
+            intervalModalOverlay
+        ) {
+
+            closeIntervalStatusModal();
+        }
+    }
+);
+
+
+function closeIntervalStatusModal() {
+
+    intervalModalOverlay.classList.remove(
+        "visible"
+    );
+
+
+    pendingIntervalStart =
+        null;
+
+    pendingIntervalEnd =
+        null;
+
+    pendingIntervalStatus =
+        null;
+
+    pendingIntervalIsWater =
+        null;
+}
+
+
+/* ================================================================
+   SINGLE POINT STATUS
+================================================================ */
+
+function setPointStatus(
+    recordIndex,
+    newStatus
+) {
+
+    if (
+        !STATUS_VALUES.includes(
+            newStatus
+        )
+    ) {
+
+        return;
+    }
+
+
+    const row =
+        state.currentRows.find(
+            item =>
+                item.recordIndex ===
+                recordIndex
+        );
+
+
+    if (!row) {
+
+        return;
+    }
+
+
+    if (
+        row.status ===
+        newStatus
+    ) {
+
+        return;
+    }
+
+
+    pushUndo(
+        `Изменение status точки ${recordIndex + 1}: ${newStatus}`
+    );
+
+
+    addOverride(
+        recordIndex,
+        recordIndex,
+        newStatus,
+        row.isWater
+    );
+
+
+    refreshCurrentRows();
+
+    renderCurrentPage();
+
+
+    setStatus(
+        `status строки ${recordIndex + 1} изменён на ${newStatus}.`,
+        "success"
+    );
+}
+
+
+/* ================================================================
+   SINGLE POINT IS_WATER
+================================================================ */
+
+function setPointIsWater(
+    recordIndex,
+    newIsWater
+) {
+
+    newIsWater =
+        Boolean(
+            newIsWater
+        );
+
+
+    const row =
+        state.currentRows.find(
+            item =>
+                item.recordIndex ===
+                recordIndex
+        );
+
+
+    if (!row) {
+
+        return;
+    }
+
+
+    if (
+        row.isWater ===
+        newIsWater
+    ) {
+
+        return;
+    }
+
+
+    pushUndo(
+        `Изменение is_water точки ${recordIndex + 1}: ${newIsWater}`
+    );
+
+
+    addOverride(
+        recordIndex,
+        recordIndex,
+        row.status,
+        newIsWater
+    );
+
+
+    refreshCurrentRows();
+
+    renderCurrentPage();
+
+
+    setStatus(
+        `is_water строки ${recordIndex + 1} изменён на ${newIsWater}.`,
+        "success"
+    );
+}
+
+
+/* ================================================================
+   OVERRIDE
+================================================================ */
+
+function addOverride(
+    start,
+    end,
+    status,
+    isWater
+) {
+
+    state.overrides.push(
+        {
+            start,
+
+            end,
+
+            status,
+
+            isWater:
+                Boolean(
+                    isWater
+                )
+        }
+    );
+}
+
+
+function refreshCurrentRows() {
+
+    for (
+        const row
+        of state.currentRows
+    ) {
+
+        row.status =
+            getEffectiveStatus(
+                row.recordIndex,
+                row.sourceStatus
+            );
+
+
+        row.isWater =
+            getEffectiveIsWater(
+                row.recordIndex,
+                row.sourceIsWater
+            );
+    }
+}
+
+
+/* ================================================================
+   SELECTION UI
+================================================================ */
+
+function updateSelectionUI() {
+
+    if (
+        !state.selectionStart
+    ) {
+
+        selectionStatusElement.textContent =
+            "Выберите первую точку интервала.";
+
+
+        selectionStatusElement.className =
+            "selection-status";
+
+
+        cancelSelectionButton.disabled =
+            true;
+
+
+        return;
+    }
+
+
+    selectionStatusElement.innerHTML =
+        `
+        Первая точка:
+        <b>
+            ${state.selectionStart.recordIndex + 1}
+        </b>
+
+        <br>
+
+        Исходный номер:
+        <b>
+            ${escapeHtml(
+                state.selectionStart.csvNumber
+            )}
+        </b>
+
+        <br>
+
+        Теперь выберите конечную точку.
+        `;
+
+
+    selectionStatusElement.className =
+        "selection-status active";
+
+
+    cancelSelectionButton.disabled =
+        false;
+}
+
+
+cancelSelectionButton.addEventListener(
+    "click",
+    cancelSelection
+);
+
+
+function cancelSelection() {
+
+    state.selectionStart =
+        null;
+
+
+    updateSelectionUI();
+
+    renderTable();
+
+    updateMarkerStyles();
+
+
+    setStatus(
+        "Выбор интервала отменён."
+    );
+}
+
+
+/* ================================================================
+   MARKER UPDATE
+================================================================ */
+
+function updateMarkerStyles() {
+
+    for (
+        const [
+            recordIndex,
+            marker
+        ]
+        of state.markers
+    ) {
+
+        const row =
+            state.currentRows.find(
+                item =>
+                    item.recordIndex ===
+                    recordIndex
+            );
+
+
+        if (!row) {
+
+            continue;
+        }
+
+
+        marker.setStyle(
+            getMarkerStyle(
+                row
+            )
+        );
+
+
+        marker.setTooltipContent(
+            createTooltip(
+                row
+            )
+        );
+    }
+}
+
+
+/* ================================================================
+   UNDO
+================================================================ */
+
+function pushUndo(
+    description
+) {
+
+    state.undoStack.push(
+        {
+            overrides:
+                cloneOverrides(
+                    state.overrides
+                ),
+
+            description
+        }
+    );
+
+
+    if (
+        state.undoStack.length >
+        state.maxUndo
+    ) {
+
+        state.undoStack.shift();
+    }
+
+
+    updateUndoButton();
+}
+
+
+function cloneOverrides(
+    overrides
+) {
+
+    return overrides.map(
+        override => ({
+            start:
+                override.start,
+
+            end:
+                override.end,
+
+            status:
+                override.status,
+
+            isWater:
+                Boolean(
+                    override.isWater
+                )
+        })
+    );
+}
+
+
+function undoLastAction() {
+
+    if (
+        state.undoStack.length ===
+        0
+    ) {
+
+        return;
+    }
+
+
+    const last =
+        state.undoStack.pop();
+
+
+    state.overrides =
+        cloneOverrides(
+            last.overrides
+        );
+
+
+    refreshCurrentRows();
+
+    renderCurrentPage();
+
+    updateSelectionUI();
+
+    updateUndoButton();
+
+
+    setStatus(
+        `Отменено действие: ${last.description}`,
+        "success"
+    );
+}
+
+
+undoButton.addEventListener(
+    "click",
+    undoLastAction
+);
+
+
+function updateUndoButton() {
+
+    undoButton.disabled =
+        state.undoStack.length ===
+        0;
+
+
+    if (
+        state.undoStack.length > 0
+    ) {
+
+        undoButton.title =
+            state.undoStack[
+                state.undoStack.length - 1
+            ].description;
+
+    } else {
+
+        undoButton.title =
+            "Нет действий для отмены";
+    }
+}
+
+
+/* ================================================================
+   RESET CURRENT PAGE
+================================================================ */
+
+clearCurrentPageButton.addEventListener(
+    "click",
+    function() {
+
+        if (
+            state.currentPage < 0
+        ) {
+
+            return;
+        }
+
+
+        const pageStart =
+            state.currentPage *
+            state.pageSize;
+
+
+        const pageEnd =
+            pageStart +
+            state.currentRows.length -
+            1;
+
+
+        pushUndo(
+            `Сброс изменений страницы ${state.currentPage + 1}`
+        );
+
+
+        const newOverrides =
+            [];
+
+
+        for (
+            const override
+            of state.overrides
+        ) {
+
+            /*
+             * Override полностью слева.
+             */
+            if (
+                override.end <
+                pageStart
+            ) {
+
+                newOverrides.push(
+                    override
+                );
+
+                continue;
+            }
+
+
+            /*
+             * Override полностью справа.
+             */
+            if (
+                override.start >
+                pageEnd
+            ) {
+
+                newOverrides.push(
+                    override
+                );
+
+                continue;
+            }
+
+
+            /*
+             * Левая часть.
+             */
+            if (
+                override.start <
+                pageStart
+            ) {
+
+                newOverrides.push(
+                    {
+                        start:
+                            override.start,
+
+                        end:
+                            pageStart - 1,
+
+                        status:
+                            override.status,
+
+                        isWater:
+                            override.isWater
+                    }
+                );
+            }
+
+
+            /*
+             * Правая часть.
+             */
+            if (
+                override.end >
+                pageEnd
+            ) {
+
+                newOverrides.push(
+                    {
+                        start:
+                            pageEnd + 1,
+
+                        end:
+                            override.end,
+
+                        status:
+                            override.status,
+
+                        isWater:
+                            override.isWater
+                    }
+                );
+            }
+        }
+
+
+        state.overrides =
+            newOverrides;
+
+
+        refreshCurrentRows();
+
+        renderCurrentPage();
+
+
+        setStatus(
+            "Пользовательские изменения текущей страницы сброшены.",
+            "success"
+        );
+    }
+);
+
+
+/* ================================================================
+   CLEAR ALL USER CHANGES
+================================================================ */
+
+clearAllButton.addEventListener(
+    "click",
+    function() {
+
+        if (
+            state.overrides.length ===
+            0
+        ) {
+
+            return;
+        }
+
+
+        const confirmed =
+            confirm(
+                "Удалить всю пользовательскую разметку?"
+            );
+
+
+        if (!confirmed) {
+
+            return;
+        }
+
+
+        pushUndo(
+            "Удаление всей пользовательской разметки"
+        );
+
+
+        state.overrides =
+            [];
+
+
+        state.selectionStart =
+            null;
+
+
+        refreshCurrentRows();
+
+        renderCurrentPage();
+
+        updateSelectionUI();
+
+
+        setStatus(
+            "Пользовательская разметка удалена. Исходные значения сохранены.",
+            "success"
+        );
+    }
+);
+
+
+/* ================================================================
+   NAVIGATION
+================================================================ */
+
+firstPageButton.addEventListener(
+    "click",
+    async function() {
+
+        if (
+            state.currentPage <=
+            0
+        ) {
+
+            return;
+        }
+
+
+        state.fitMapOnPageLoad =
+            true;
+
+
+        await loadPage(
+            0
+        );
+    }
+);
+
+
+prevPageButton.addEventListener(
+    "click",
+    async function() {
+
+        if (
+            state.currentPage <=
+            0
+        ) {
+
+            return;
+        }
+
+
+        state.fitMapOnPageLoad =
+            true;
+
+
+        await loadPage(
+            state.currentPage - 1
+        );
+    }
+);
+
+
+nextPageButton.addEventListener(
+    "click",
+    async function() {
+
+        if (
+            !canGoNext()
+        ) {
+
+            return;
+        }
+
+
+        state.fitMapOnPageLoad =
+            true;
+
+
+        await loadPage(
+            state.currentPage + 1
+        );
+    }
+);
+
+
+lastPageButton.addEventListener(
+    "click",
+    async function() {
+
+        if (
+            state.totalRows ===
+            null
+        ) {
+
+            showLoading(
+                "Определение последней страницы..."
+            );
+
+
+            try {
+
+                await determineTotalRows();
+
+            } finally {
+
+                hideLoading();
+            }
+        }
+
+
+        const lastPage =
+            Math.max(
+                0,
+                Math.ceil(
+                    state.totalRows /
+                    state.pageSize
+                ) - 1
+            );
+
+
+        state.fitMapOnPageLoad =
+            true;
+
+
+        await loadPage(
+            lastPage
+        );
+    }
+);
+
+
+function canGoNext() {
+
+    if (
+        state.totalRows !==
+        null
+    ) {
+
+        const totalPages =
+            Math.ceil(
+                state.totalRows /
+                state.pageSize
+            );
+
+
+        return (
+            state.currentPage <
+            totalPages - 1
+        );
+    }
+
+
+    return (
+        state.pageOffsets[
+            state.currentPage + 1
+        ] !== undefined
+    );
+}
+
+
+function updateNavigation() {
+
+    firstPageButton.disabled =
+        state.currentPage <=
+        0;
+
+
+    prevPageButton.disabled =
+        state.currentPage <=
+        0;
+
+
+    nextPageButton.disabled =
+        !canGoNext();
+
+
+    lastPageButton.disabled =
+        state.totalRows ===
+        null;
+
+
+    const page =
+        state.currentPage + 1;
+
+
+    let text =
+        `Страница ${page}`;
+
+
+    if (
+        state.totalRows !==
+        null
+    ) {
+
+        const totalPages =
+            Math.ceil(
+                state.totalRows /
+                state.pageSize
+            );
+
+
+        text +=
+            ` из ${totalPages}`;
+    }
+
+
+    pageInfoElement.textContent =
+        text;
+}
+
+
+/* ================================================================
+   TOTAL ROWS
+================================================================ */
+
+async function determineTotalRows() {
+
+    if (
+        state.totalRows !==
+        null
+    ) {
+
+        return;
+    }
+
+
+    let pageNumber =
+        state.pageOffsets.length -
+        1;
+
+
+    let offset =
+        state.pageOffsets[
+            pageNumber
+        ];
+
+
+    while (
+        true
+    ) {
+
+        loadingText.textContent =
+            `Определение размера файла: страница ${pageNumber + 1}...`;
+
+
+        const result =
+            await readPage(
+                offset,
+                pageNumber
+            );
+
+
+        if (
+            result.rows.length <
+            state.pageSize
+        ) {
+
+            state.totalRows =
+                pageNumber *
+                    state.pageSize +
+                result.rows.length;
+
+
+            break;
+        }
+
+
+        pageNumber++;
+
+
+        offset =
+            result.nextOffset;
+
+
+        state.pageOffsets[
+            pageNumber
+        ] =
+            offset;
+
+
+        await yieldToBrowser();
+    }
+
+
+    updateNavigation();
+}
+
+
+/* ================================================================
+   STATISTICS
+================================================================ */
+
+function updateStatistics() {
+
+    pageRowCountElement.textContent =
+        state.currentRows.length;
+
+
+    if (
+        state.currentRows.length > 0
+    ) {
+
+        const first =
+            state.currentRows[0];
+
+
+        const last =
+            state.currentRows[
+                state.currentRows.length - 1
+            ];
+
+
+        rowRangeElement.textContent =
+            `${first.recordIndex + 1}–${last.recordIndex + 1}`;
+
+    } else {
+
+        rowRangeElement.textContent =
+            "—";
+    }
+
+
+    let move = 0;
+
+    let stand = 0;
+
+    let anomaly = 0;
+
+    let water = 0;
+
+
+    for (
+        const row
+        of state.currentRows
+    ) {
+
+        switch (
+            row.status
+        ) {
+
+            case "move":
+
+                move++;
+
+                break;
+
+            case "stand":
+
+                stand++;
+
+                break;
+
+            case "anomaly":
+
+                anomaly++;
+
+                break;
+        }
+
+
+        if (
+            row.isWater
+        ) {
+
+            water++;
+        }
+    }
+
+
+    moveCountElement.textContent =
+        move.toLocaleString(
+            "ru-RU"
+        );
+
+
+    standCountElement.textContent =
+        stand.toLocaleString(
+            "ru-RU"
+        );
+
+
+    anomalyCountElement.textContent =
+        anomaly.toLocaleString(
+            "ru-RU"
+        );
+
+
+    waterCountElement.textContent =
+        water.toLocaleString(
+            "ru-RU"
+        );
+
+
+    intervalCountElement.textContent =
+        state.overrides.length;
+}
+
+
+/* ================================================================
+   DEFAULT VALUES
+================================================================ */
+
+defaultStatusSelect.addEventListener(
+    "change",
+    function() {
+
+        state.defaultStatus =
+            defaultStatusSelect.value;
+
+
+        setStatus(
+            `Статус по умолчанию: ${state.defaultStatus}.`,
+            "success"
+        );
+    }
+);
+
+
+defaultIsWaterSelect.addEventListener(
+    "change",
+    function() {
+
+        state.defaultIsWater =
+            defaultIsWaterSelect.value ===
+            "true";
+
+
+        setStatus(
+            `is_water по умолчанию: ${state.defaultIsWater}.`,
+            "success"
+        );
+    }
+);
+
+
+/* ================================================================
+   PAGE SIZE
+================================================================ */
+
+pageSizeInput.addEventListener(
+    "change",
+    async function() {
+
+        if (
+            !state.file
+        ) {
+
+            return;
+        }
+
+
+        const newPageSize =
+            Math.floor(
+                Number(
+                    pageSizeInput.value
+                )
+            );
+
+
+        if (
+            !Number.isFinite(
+                newPageSize
+            ) ||
+            newPageSize < 100
+        ) {
+
+            pageSizeInput.value =
+                state.pageSize;
+
+            return;
+        }
+
+
+        const confirmed =
+            confirm(
+                "Изменение размера страницы перестроит индекс страниц. " +
+                "Разметка сохранится. Продолжить?"
+            );
+
+
+        if (!confirmed) {
+
+            pageSizeInput.value =
+                state.pageSize;
+
+            return;
+        }
+
+
+        state.pageSize =
+            newPageSize;
+
+
+        state.pageOffsets =
+            [];
+
+
+        state.pageOffsets[0] =
+            state.dataStartOffset;
+
+
+        state.totalRows =
+            null;
+
+
+        state.currentPage =
+            -1;
+
+
+        state.currentRows =
+            [];
+
+
+        state.focusedRecordIndex =
+            null;
+
+
+        state.fitMapOnPageLoad =
+            true;
+
+
+        await loadPage(
+            0
+        );
+
+
+        updateNavigation();
+    }
+);
+
+
+/* ================================================================
+   EXPORT
+================================================================ */
+
+exportButton.addEventListener(
+    "click",
+    async function() {
+
+        if (
+            !state.file
+        ) {
+
+            return;
+        }
+
+
+        const confirmed =
+            confirm(
+                "Сформировать новый CSV с колонками status и is_water?"
+            );
+
+
+        if (!confirmed) {
+
+            return;
+        }
+
+
+        showLoading(
+            "Экспорт CSV..."
+        );
+
+
+        try {
+
+            await exportCSV();
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                error
+            );
+
+
+            setStatus(
+                "Ошибка экспорта: " +
+                error.message,
+                "error"
+            );
+
+        } finally {
+
+            hideLoading();
+        }
+    }
+);
+
+
+async function exportCSV() {
+
+    const outputChunks =
+        [];
+
+
+    /*
+     * Пересоздаём status и is_water.
+     */
+    const outputHeaders =
+        [];
+
+
+    state.headers.forEach(
+        function(header) {
+
+            const normalized =
+                header
+                    .trim()
+                    .toLowerCase();
+
+
+            /*
+             * Старые поля меток
+             * не копируем.
+             */
+            if (
+                normalized ===
+                    "correct_point" ||
+                normalized ===
+                    "status" ||
+                normalized ===
+                    "is_water"
+            ) {
+
+                return;
+            }
+
+
+            outputHeaders.push(
+                header
+            );
+        }
+    );
+
+
+    outputHeaders.push(
+        "status"
+    );
+
+
+    outputHeaders.push(
+        "is_water"
+    );
+
+
+    const outputHeader =
+        outputHeaders
+            .map(
+                field =>
+                    escapeCSVField(
+                        field,
+                        state.delimiter
+                    )
+            )
+            .join(
+                state.delimiter
+            );
+
+
+    outputChunks.push(
+        outputHeader +
+        "\n"
+    );
+
+
+    let offset =
+        state.dataStartOffset;
+
+
+    let pending =
+        "";
+
+
+    let recordIndex =
+        0;
+
+
+    const decoder =
+        new TextDecoder(
+            "utf-8"
+        );
+
+
+    while (
+        offset <
+        state.file.size
+    ) {
+
+        const end =
+            Math.min(
+                offset +
+                    READ_CHUNK_SIZE,
+                state.file.size
+            );
+
+
+        const blob =
+            state.file.slice(
+                offset,
+                end
+            );
+
+
+        const arrayBuffer =
+            await blob.arrayBuffer();
+
+
+        const text =
+            decoder.decode(
+                arrayBuffer,
+                {
+                    stream:
+                        end <
+                        state.file.size
+                }
+            );
+
+
+        offset =
+            end;
+
+
+        pending +=
+            text;
+
+
+        let newlineIndex;
+
+
+        while (
+            (
+                newlineIndex =
+                    pending.indexOf(
+                        "\n"
+                    )
+            ) !== -1
+        ) {
+
+            let line =
+                pending.slice(
+                    0,
+                    newlineIndex
+                );
+
+
+            pending =
+                pending.slice(
+                    newlineIndex + 1
+                );
+
+
+            if (
+                line.endsWith(
+                    "\r"
+                )
+            ) {
+
+                line =
+                    line.slice(
+                        0,
+                        -1
+                    );
+            }
+
+
+            if (
+                !line.trim()
+            ) {
+
+                continue;
+            }
+
+
+            const fields =
+                parseCSVLine(
+                    line,
+                    state.delimiter
+                );
+
+
+            const sourceStatus =
+                getSourceStatus(
+                    fields
+                );
+
+
+            const sourceIsWater =
+                getSourceIsWater(
+                    fields
+                );
+
+
+            const status =
+                getEffectiveStatus(
+                    recordIndex,
+                    sourceStatus
+                );
+
+
+            const isWater =
+                getEffectiveIsWater(
+                    recordIndex,
+                    sourceIsWater
+                );
+
+
+            const outputFields =
+                [];
+
+
+            state.headers.forEach(
+                function(
+                    header,
+                    index
+                ) {
+
+                    const normalized =
+                        header
+                            .trim()
+                            .toLowerCase();
+
+
+                    if (
+                        normalized ===
+                            "correct_point" ||
+                        normalized ===
+                            "status" ||
+                        normalized ===
+                            "is_water"
+                    ) {
+
+                        return;
+                    }
+
+
+                    outputFields.push(
+                        fields[index] ??
+                        ""
+                    );
+                }
+            );
+
+
+            outputFields.push(
+                status
+            );
+
+
+            /*
+             * В CSV boolean пишется как
+             * true / false.
+             */
+            outputFields.push(
+                isWater
+                    ? "true"
+                    : "false"
+            );
+
+
+            outputChunks.push(
+                outputFields
+                    .map(
+                        field =>
+                            escapeCSVField(
+                                field,
+                                state.delimiter
+                            )
+                    )
+                    .join(
+                        state.delimiter
+                    ) +
+                "\n"
+            );
+
+
+            recordIndex++;
+
+
+            if (
+                recordIndex %
+                100000 ===
+                0
+            ) {
+
+                loadingText.textContent =
+                    `Экспортировано: ${recordIndex.toLocaleString("ru-RU")} строк...`;
+
+
+                await yieldToBrowser();
+            }
+        }
+    }
+
+
+    /*
+     * Последняя строка.
+     */
+    if (
+        pending.trim()
+    ) {
+
+        let line =
+            pending;
+
+
+        if (
+            line.endsWith(
+                "\r"
+            )
+        ) {
+
+            line =
+                line.slice(
+                    0,
+                    -1
+                );
+        }
+
+
+        const fields =
+            parseCSVLine(
+                line,
+                state.delimiter
+            );
+
+
+        const sourceStatus =
+            getSourceStatus(
+                fields
+            );
+
+
+        const sourceIsWater =
+            getSourceIsWater(
+                fields
+            );
+
+
+        const status =
+            getEffectiveStatus(
+                recordIndex,
+                sourceStatus
+            );
+
+
+        const isWater =
+            getEffectiveIsWater(
+                recordIndex,
+                sourceIsWater
+            );
+
+
+        const outputFields =
+            [];
+
+
+        state.headers.forEach(
+            function(
+                header,
+                index
+            ) {
+
+                const normalized =
+                    header
+                        .trim()
+                        .toLowerCase();
+
+
+                if (
+                    normalized ===
+                        "correct_point" ||
+                    normalized ===
+                        "status" ||
+                    normalized ===
+                        "is_water"
+                ) {
+
+                    return;
+                }
+
+
+                outputFields.push(
+                    fields[index] ??
+                    ""
+                );
+            }
+        );
+
+
+        outputFields.push(
+            status
+        );
+
+
+        outputFields.push(
+            isWater
+                ? "true"
+                : "false"
+        );
+
+
+        outputChunks.push(
+            outputFields
+                .map(
+                    field =>
+                        escapeCSVField(
+                            field,
+                            state.delimiter
+                        )
+                )
+                .join(
+                    state.delimiter
+                ) +
+            "\n"
+        );
+
+
+        recordIndex++;
+    }
+
+
+    loadingText.textContent =
+        "Формирование файла...";
+
+
+    const blob =
+        new Blob(
+            outputChunks,
+            {
+                type:
+                    "text/csv;charset=utf-8"
+            }
+        );
+
+
+    const url =
+        URL.createObjectURL(
+            blob
+        );
+
+
+    const link =
+        document.createElement(
+            "a"
+        );
+
+
+    link.href =
+        url;
+
+
+    const originalName =
+        state.file.name.replace(
+            /\.csv$/i,
+            ""
+        );
+
+
+    link.download =
+        originalName +
+        "_labeled.csv";
+
+
+    document.body.appendChild(
+        link
+    );
+
+
+    link.click();
+
+
+    link.remove();
+
+
+    URL.revokeObjectURL(
+        url
+    );
+
+
+    setStatus(
+        `Экспорт завершён. Обработано ${recordIndex.toLocaleString("ru-RU")} строк.`,
+        "success"
+    );
+}
+
+
+/* ================================================================
+   KEYBOARD
+================================================================ */
+
+document.addEventListener(
+    "keydown",
+    async function(event) {
+
+        /*
+         * Не обрабатываем горячие клавиши
+         * внутри элементов ввода.
+         */
+        if (
+            event.target.tagName ===
+                "INPUT" ||
+            event.target.tagName ===
+                "TEXTAREA" ||
+            event.target.tagName ===
+                "SELECT"
+        ) {
+
+            return;
+        }
+
+
+        /*
+         * PageUp.
+         */
+        if (
+            event.key ===
+            "PageUp"
+        ) {
+
+            if (
+                state.currentPage > 0
+            ) {
+
+                event.preventDefault();
+
+
+                state.fitMapOnPageLoad =
+                    true;
+
+
+                await loadPage(
+                    state.currentPage - 1
+                );
+            }
+        }
+
+
+        /*
+         * PageDown.
+         */
+        if (
+            event.key ===
+            "PageDown"
+        ) {
+
+            if (
+                canGoNext()
+            ) {
+
+                event.preventDefault();
+
+
+                state.fitMapOnPageLoad =
+                    true;
+
+
+                await loadPage(
+                    state.currentPage + 1
+                );
+            }
+        }
+
+
+        /*
+         * Escape.
+         */
+        if (
+            event.key ===
+            "Escape"
+        ) {
+
+            if (
+                intervalModalOverlay.classList.contains(
+                    "visible"
+                )
+            ) {
+
+                closeIntervalStatusModal();
+
+                return;
+            }
+
+
+            if (
+                state.selectionStart
+            ) {
+
+                cancelSelection();
+            }
+        }
+
+
+        /*
+         * Ctrl+Z / Cmd+Z.
+         */
+        if (
+            (
+                event.ctrlKey ||
+                event.metaKey
+            ) &&
+            event.key.toLowerCase() ===
+            "z"
+        ) {
+
+            event.preventDefault();
+
+            undoLastAction();
+        }
+    }
+);
+
+
+/* ================================================================
+   UTILS
+================================================================ */
+
+function escapeHtml(
+    value
+) {
+
+    return String(
+        value
+    )
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
+}
+
+
+function formatBytes(
+    bytes
+) {
+
+    if (
+        bytes === 0
+    ) {
+
+        return "0 B";
+    }
+
+
+    const units = [
+        "B",
+        "KB",
+        "MB",
+        "GB",
+        "TB"
+    ];
+
+
+    const index =
+        Math.floor(
+            Math.log(
+                bytes
+            ) /
+            Math.log(
+                1024
+            )
+        );
+
+
+    return (
+        bytes /
+        Math.pow(
+            1024,
+            index
+        )
+    ).toFixed(
+        2
+    ) +
+    " " +
+    units[index];
+}
+
+
+function yieldToBrowser() {
+
+    return new Promise(
+        resolve =>
+            setTimeout(
+                resolve,
+                0
+            )
+    );
+}
+
+
+/* ================================================================
+   INITIAL STATE
+================================================================ */
+
+updateNavigation();
+
+updateStatistics();
+
+updateSelectionUI();
+
+updateUndoButton();
+
+</script>
+
+</body>
+</html>

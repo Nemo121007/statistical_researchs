@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoJSON Редактор</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { height: 100vh; width: 100%; cursor: default; }
+
+        .panel {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+        .file-upload { position: absolute; top: 10px; left: 10px; }
+        .info-panel { position: absolute; top: 10px; right: 10px; max-width: 300px; }
+        .editor-panel { position: absolute; top: 120px; left: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+        h4 { margin-top: 0; margin-bottom: 10px; color: #0056b3; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+
+        button {
+            background-color: #0056b3; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; transition: background 0.2s;
+        }
+        button:hover { background-color: #004494; }
+        button.active-tool { background-color: #28a745; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
+        button.cancel-btn { background-color: #dc3545; display: none; }
+
+        .popup-content { max-height: 300px; overflow-y: auto; }
+        .popup-content table { width: 100%; border-collapse: collapse; }
+        .popup-content th, .popup-content td { padding: 6px 4px; border-bottom: 1px solid #ddd; text-align: left; font-size: 14px; }
+        .popup-content th { background-color: #f2f2f2; font-weight: bold; }
+
+        .legend { margin-top: 15px; line-height: 20px; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
+        .legend-color { width: 20px; height: 10px; margin-right: 8px; border-radius: 2px; }
+        .way-gradient { background: linear-gradient(to right, #ff0000, #0000ff, #00ff00, #ffff00, #ff00ff, #00ffff); }
+        .polygon-legend { background-color: rgba(51, 136, 255, 0.3); border: 2px solid #0056b3; }
+        .point-legend { background-color: #ff7800; border-radius: 50%; border: 2px solid #000; width: 12px; height: 12px; }
+        .legend-item.disabled { opacity: 0.5; }
+
+        .error-message { color: #d9534f; font-weight: bold; margin: 5px 0; }
+        .success-message { color: #5cb85c; font-weight: bold; margin: 5px 0; }
+
+        /* Стили модального окна свойств */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: white; padding: 20px; border-radius: 8px; width: 400px; max-width: 90%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .prop-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .prop-row input { flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+        .prop-actions { display: flex; justify-content: space-between; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div class="panel file-upload">
+        <h4>Загрузка GeoJSON</h4>
+        <input type="file" id="file-input" accept=".geojson,.json" />
+        <div id="file-info"></div>
+    </div>
+
+    <div class="panel editor-panel">
+        <h4>Редактор</h4>
+        <button id="btn-draw-line" onclick="startDrawing('line')">✏️ Нарисовать линию</button>
+        <button id="btn-draw-poly" onclick="startDrawing('polygon')">⬟ Нарисовать полигон</button>
+        <button id="btn-cancel-draw" class="cancel-btn" onclick="cancelDrawing()">❌ Отменить (Esc)</button>
+        <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+            <button onclick="exportGeoJSON()" style="background-color: #6f42c1; width: 100%;">💾 Скачать GeoJSON</button>
+        </div>
+        <div id="draw-hints" style="font-size: 12px; color: #666; margin-top: 5px; display: none;">
+        </div>
+    </div>
+
+    <div class="panel info-panel">
+        <h4>Информация о карте</h4>
+        <div id="info-content">
+            <p>Загрузите файл или создайте новые объекты</p>
+        </div>
+        <div class="legend">
+            <h4>Легенда</h4>
+            <div class="legend-item"><input type="checkbox" id="toggle-ways" checked> <div class="legend-color way-gradient"></div> <span>Пути</span></div>
+            <div class="legend-item"><input type="checkbox" id="toggle-polygons" checked> <div class="legend-color polygon-legend"></div> <span>Многоугольники</span></div>
+            <div class="legend-item"><input type="checkbox" id="toggle-points" checked> <div class="legend-color point-legend"></div> <span>Точки</span></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="props-modal">
+        <div class="modal-content">
+            <h4>Свойства объекта (Properties)</h4>
+            <p style="font-size: 12px; color: #666;">Задайте ключи и значения для нового объекта.</p>
+            <div id="props-container"></div>
+            <button onclick="addPropertyField()" style="background-color: #17a2b8; margin-bottom: 10px;">+ Добавить поле</button>
+            <div class="prop-actions">
+                <button onclick="cancelProperties()" style="background-color: #6c757d;">Отмена (удалить объект)</button>
+                <button onclick="saveProperties()" style="background-color: #28a745;">Сохранить объект</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация карты
+        var map = L.map('map').setView([55.755864, 37.617635], 10);
+        var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+        var satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '&copy; Esri' });
+        L.control.layers({ "OpenStreetMap": osmLayer, "Спутник": satelliteLayer }).addTo(map);
+
+        var wayColors = ['#ff0000', '#0000ff', '#00ff00', '#ffff00', '#ff00ff', '#00ffff', '#ff7700', '#9900ff'];
+        var waysLayer = L.featureGroup().addTo(map);
+        var polygonsLayer = L.featureGroup().addTo(map);
+        var pointsLayer = L.featureGroup().addTo(map);
+
+        // Главное хранилище GeoJSON данных
+        var currentGeoJSON = { type: "FeatureCollection", features: [] };
+
+        // --- ЛОГИКА РЕДАКТОРА ---
+        let isDrawing = false;
+        let drawMode = null;
+        let drawPoints = [];
+        let drawTempLayer = null;
+        let drawMouseLine = null;
+        let snapMarker = null;
+        let pendingGeometry = null;
+        let currentSnapLatLng = null; // Хранит текущую точку прилипания
+
+        function startDrawing(mode) {
+            isDrawing = true;
+            drawMode = mode;
+            drawPoints = [];
+            currentSnapLatLng = null;
+
+            document.getElementById('map').style.cursor = 'crosshair';
+            document.getElementById('btn-draw-line').classList.toggle('active-tool', mode === 'line');
+            document.getElementById('btn-draw-poly').classList.toggle('active-tool', mode === 'polygon');
+            document.getElementById('btn-cancel-draw').style.display = 'block';
+
+            let hints = document.getElementById('draw-hints');
+            hints.style.display = 'block';
+            if (mode === 'line') hints.innerHTML = "Кликайте для добавления точек.<br><b>Двойной клик или Enter</b> для завершения.";
+            if (mode === 'polygon') hints.innerHTML = "Кликайте для добавления точек.<br><b>Кликните на первую точку</b> для замыкания полигона.";
+
+            map.doubleClickZoom.disable();
+        }
+
+        function cancelDrawing() {
+            isDrawing = false;
+            drawMode = null;
+            drawPoints = [];
+            currentSnapLatLng = null;
+
+            if (drawTempLayer) { map.removeLayer(drawTempLayer); drawTempLayer = null; }
+            if (drawMouseLine) { map.removeLayer(drawMouseLine); drawMouseLine = null; }
+            if (snapMarker) { map.removeLayer(snapMarker); snapMarker = null; }
+
+            document.getElementById('map').style.cursor = 'default';
+            document.getElementById('btn-draw-line').classList.remove('active-tool');
+            document.getElementById('btn-draw-poly').classList.remove('active-tool');
+            document.getElementById('btn-cancel-draw').style.display = 'none';
+            document.getElementById('draw-hints').style.display = 'none';
+            map.doubleClickZoom.enable();
+        }
+
+        // Обработка одиночного клика
+        map.on('click', function(e) {
+            if (!isDrawing) return;
+
+            // Если сработало прилипание, берем координаты объекта, иначе координаты клика мыши
+            let actualLatLng = currentSnapLatLng ? currentSnapLatLng : e.latlng;
+
+            // Проверка замыкания полигона (если прилипли к самой первой точке текущего полигона)
+            if (drawMode === 'polygon' && drawPoints.length >= 3) {
+                if (actualLatLng.lat === drawPoints[0].lat && actualLatLng.lng === drawPoints[0].lng) {
+                    finishDrawing();
+                    return;
+                }
+            }
+
+            drawPoints.push(actualLatLng);
+            updateDrawVisuals();
+        });
+
+        // Обработка двойного клика
+        map.on('dblclick', function(e) {
+            if (isDrawing && drawMode === 'line') {
+                L.DomEvent.stop(e);
+
+                if (drawPoints.length > 1) {
+                    let lastPoint = map.latLngToLayerPoint(drawPoints[drawPoints.length - 1]);
+                    let prevPoint = map.latLngToLayerPoint(drawPoints[drawPoints.length - 2]);
+                    if (lastPoint.distanceTo(prevPoint) < 5) {
+                        drawPoints.pop();
+                    }
+                }
+
+                finishDrawing();
+            }
+        });
+
+        // Обработка горячих клавиш (Enter и Esc)
+        document.addEventListener('keydown', function(e) {
+            if (!isDrawing) return;
+            if (e.key === 'Enter' && drawMode === 'line') {
+                finishDrawing();
+            } else if (e.key === 'Escape') {
+                cancelDrawing();
+            }
+        });
+
+        // Движение мыши: поиск ближайших точек (прилипание) и резиновая нить
+        map.on('mousemove', function(e) {
+            if (!isDrawing) return;
+
+            let mousePoint = map.latLngToLayerPoint(e.latlng);
+            let minDist = 20; // Радиус прилипания в пикселях
+            currentSnapLatLng = null;
+
+            // 1. Проверяем прилипание к первой точке текущего рисуемого полигона
+            if (drawMode === 'polygon' && drawPoints.length >= 2) {
+                let firstPoint = map.latLngToLayerPoint(drawPoints[0]);
+                let d = firstPoint.distanceTo(mousePoint);
+                if (d < minDist) {
+                    minDist = d;
+                    currentSnapLatLng = drawPoints[0];
+                }
+            }
+
+            // 2. Проверяем прилипание ко ВСЕМ существующим объектам в currentGeoJSON
+            currentGeoJSON.features.forEach(feature => {
+                if (!feature.geometry || !feature.geometry.coordinates) return;
+
+                let coords = feature.geometry.coordinates;
+                let type = feature.geometry.type;
+
+                // Вспомогательная функция проверки конкретной точки
+                const checkNode = (lng, lat) => {
+                    let ll = L.latLng(lat, lng);
+                    let p = map.latLngToLayerPoint(ll);
+                    let d = p.distanceTo(mousePoint);
+                    if (d < minDist) {
+                        minDist = d;
+                        currentSnapLatLng = ll; // Сохраняем координату, если она ближе
+                    }
+                };
+
+                // Перебор координат в зависимости от типа геометрии
+                if (type === 'Point') {
+                    checkNode(coords[0], coords[1]);
+                } else if (type === 'LineString') {
+                    coords.forEach(c => checkNode(c[0], c[1]));
+                } else if (type === 'Polygon') {
+                    coords.forEach(ring => ring.forEach(c => checkNode(c[0], c[1])));
+                } else if (type === 'MultiPolygon') {
+                    coords.forEach(poly => poly.forEach(ring => ring.forEach(c => checkNode(c[0], c[1]))));
+                }
+            });
+
+            // Определяем итоговую точку (прилипшую или текущую мышь)
+            let drawTargetLatLng = currentSnapLatLng ? currentSnapLatLng : e.latlng;
+
+            // Отрисовка маркера-магнита
+            if (currentSnapLatLng) {
+                if (!snapMarker) {
+                    snapMarker = L.circleMarker(currentSnapLatLng, { radius: 8, color: 'red', weight: 2, fillColor: 'red', fillOpacity: 0.5, interactive: false }).addTo(map);
+                } else {
+                    snapMarker.setLatLng(currentSnapLatLng);
+                }
+            } else {
+                if (snapMarker) { map.removeLayer(snapMarker); snapMarker = null; }
+            }
+
+            // Отрисовка линии-подсказки от последней точки до курсора
+            if (drawPoints.length > 0) {
+                let lastPoint = drawPoints[drawPoints.length - 1];
+                if (!drawMouseLine) {
+                    drawMouseLine = L.polyline([lastPoint, drawTargetLatLng], { color: '#888', dashArray: '5, 5', weight: 2, interactive: false }).addTo(map);
+                } else {
+                    drawMouseLine.setLatLngs([lastPoint, drawTargetLatLng]);
+                }
+            }
+        });
+
+        function updateDrawVisuals() {
+            if (drawTempLayer) map.removeLayer(drawTempLayer);
+
+            if (drawMode === 'line' && drawPoints.length > 1) {
+                drawTempLayer = L.polyline(drawPoints, { color: '#0056b3', weight: 4, interactive: false }).addTo(map);
+            } else if (drawMode === 'polygon' && drawPoints.length > 1) {
+                drawTempLayer = L.polygon(drawPoints, { color: '#0056b3', weight: 2, fillColor: "#3388ff", fillOpacity: 0.3, interactive: false }).addTo(map);
+            }
+        }
+
+        function finishDrawing() {
+            if (drawPoints.length < 2 || (drawMode === 'polygon' && drawPoints.length < 3)) {
+                alert("Недостаточно точек для создания объекта!");
+                cancelDrawing();
+                return;
+            }
+
+            let coords = drawPoints.map(p => [p.lng, p.lat]);
+
+            if (drawMode === 'polygon') {
+                coords.push([drawPoints[0].lng, drawPoints[0].lat]);
+                pendingGeometry = { type: "Polygon", coordinates: [coords] };
+            } else {
+                pendingGeometry = { type: "LineString", coordinates: coords };
+            }
+
+            cancelDrawing();
+            openPropertiesModal();
+        }
+
+        // --- ЛОГИКА СВОЙСТВ (PROPERTIES) ---
+        function openPropertiesModal() {
+            document.getElementById('props-container').innerHTML = '';
+            addPropertyField('name', 'Новый объект');
+            document.getElementById('props-modal').style.display = 'flex';
+        }
+
+        function addPropertyField(key = '', val = '') {
+            const container = document.getElementById('props-container');
+            const row = document.createElement('div');
+            row.className = 'prop-row';
+            row.innerHTML = `
+                <input type="text" placeholder="Ключ (например, type)" value="${key}">
+                <input type="text" placeholder="Значение" value="${val}">
+                <button onclick="this.parentElement.remove()" style="background-color: #dc3545; padding: 6px 10px;">❌</button>
+            `;
+            container.appendChild(row);
+        }
+
+        function cancelProperties() {
+            pendingGeometry = null;
+            document.getElementById('props-modal').style.display = 'none';
+        }
+
+        function saveProperties() {
+            let properties = {};
+            document.querySelectorAll('#props-container .prop-row').forEach(row => {
+                let inputs = row.querySelectorAll('input');
+                let key = inputs[0].value.trim();
+                let val = inputs[1].value.trim();
+                if (key) {
+                    properties[key] = isNaN(val) || val === '' ? val : Number(val);
+                }
+            });
+
+            let newFeature = {
+                type: "Feature",
+                properties: properties,
+                geometry: pendingGeometry
+            };
+
+            currentGeoJSON.features.push(newFeature);
+            pendingGeometry = null;
+            document.getElementById('props-modal').style.display = 'none';
+
+            loadGeoJSONData(currentGeoJSON, 'Редактор');
+        }
+
+        // --- ЭКСПОРТ ---
+        function exportGeoJSON() {
+            if(currentGeoJSON.features.length === 0) {
+                alert("Нет данных для экспорта!");
+                return;
+            }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentGeoJSON, null, 2));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "edited_map.geojson");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        // --- ЛОГИКА ОТОБРАЖЕНИЯ ---
+        function loadGeoJSONData(data, sourceName) {
+            try {
+                if (!data || !data.features || !Array.isArray(data.features)) throw new Error("Некорректный формат GeoJSON");
+
+                waysLayer.clearLayers(); polygonsLayer.clearLayers(); pointsLayer.clearLayers();
+                currentGeoJSON = data;
+
+                var waysCount = 0, polygonsCount = 0, pointsCount = 0, wayCounter = 0;
+
+                data.features.forEach(function(feature) {
+                    if (feature.geometry.type === "LineString") {
+                        waysCount++;
+                        if(!feature.properties._color) feature.properties._color = wayColors[wayCounter % wayColors.length];
+                        wayCounter++;
+                    } else if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
+                        polygonsCount++;
+                    } else if (feature.geometry.type === "Point") {
+                        pointsCount++;
+                    }
+                });
+
+                $('#info-content').html(`
+                    <p class="success-message">Текущие данные (${sourceName})</p>
+                    <p>Путей: ${waysCount}</p>
+                    <p>Многоугольников: ${polygonsCount}</p>
+                    <p>Точек: ${pointsCount}</p>
+                `);
+
+                L.geoJSON(data, {
+                    style: function(feature) {
+                        if (feature.geometry.type === "Polygon" || feature.geometry.type === "MultiPolygon") {
+                            return { fillColor: "#3388ff", color: "#0056b3", weight: 2, opacity: 1, fillOpacity: 0.3 };
+                        } else if (feature.geometry.type === "LineString") {
+                            return { color: feature.properties._color, weight: 4, opacity: 0.8 };
+                        }
+                        return {};
+                    },
+                    pointToLayer: function(feature, latlng) {
+                        return L.circleMarker(latlng, { radius: 6, fillColor: "#ff7800", color: "#000", weight: 1, opacity: 1, fillOpacity: 0.8 });
+                    },
+                    onEachFeature: function(feature, layer) {
+                        var popupContent = '<div class="popup-content">';
+                        var fType = feature.geometry.type;
+                        popupContent += `<h4>${fType === "LineString" ? "Линия" : fType === "Polygon" ? "Многоугольник" : "Точка"}</h4>`;
+
+                        popupContent += '<table>';
+                        for (var key in feature.properties) {
+                            if (key !== 'OSM_id' && key !== 'OSM_id_nodes' && key !== 'tags' && key !== '_color') {
+                                popupContent += `<tr><th>${key}</th><td>${feature.properties[key]}</td></tr>`;
+                            }
+                        }
+                        popupContent += '</table></div>';
+
+                        layer.bindPopup(popupContent);
+
+                        layer.on({
+                            mouseover: function(e) {
+                                var l = e.target;
+                                if (l instanceof L.Path) {
+                                    l.setStyle({ weight: 6, opacity: 1 });
+                                    if (l.feature.geometry.type === "Polygon") l.setStyle({ fillOpacity: 0.5 });
+                                } else if (l instanceof L.CircleMarker) {
+                                    l.setRadius(8); l.setStyle({ weight: 2, fillColor: "#ffaa00" });
+                                }
+                                if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) l.bringToFront();
+                            },
+                            mouseout: function(e) {
+                                var l = e.target;
+                                if (l instanceof L.Path) {
+                                    if (l.feature.geometry.type === "LineString") waysLayer.resetStyle(l);
+                                    else polygonsLayer.resetStyle(l);
+                                } else if (l instanceof L.CircleMarker) {
+                                    l.setRadius(6); l.setStyle({ weight: 1, fillColor: "#ff7800" });
+                                }
+                            }
+                        });
+
+                        if (fType === "LineString") waysLayer.addLayer(layer);
+                        else if (fType === "Polygon" || fType === "MultiPolygon") polygonsLayer.addLayer(layer);
+                        else if (fType === "Point") pointsLayer.addLayer(layer);
+                    }
+                });
+
+            } catch (error) {
+                $('#info-content').html(`<p class="error-message">Ошибка: ${error.message}</p>`);
+            }
+        }
+
+        // Загрузка файла пользователем
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        var data = JSON.parse(event.target.result);
+                        loadGeoJSONData(data, file.name);
+                        document.getElementById('file-info').innerHTML = `<p class="success-message">Файл загружен</p>`;
+                        map.fitBounds(L.featureGroup([waysLayer, polygonsLayer, pointsLayer]).getBounds(), {padding: [20, 20]});
+                    } catch (error) {
+                        document.getElementById('file-info').innerHTML = `<p class="error-message">Ошибка чтения</p>`;
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Управление легендой
+        ['ways', 'polygons', 'points'].forEach(type => {
+            document.getElementById(`toggle-${type}`).addEventListener('change', function() {
+                let layerGroup = type === 'ways' ? waysLayer : type === 'polygons' ? polygonsLayer : pointsLayer;
+                this.checked ? map.addLayer(layerGroup) : map.removeLayer(layerGroup);
+                this.parentElement.classList.toggle('disabled', !this.checked);
+            });
+        });
+    </script>
+</body>
+</html>
