@@ -207,6 +207,12 @@ $$ \mathbf f_i=\left( x_i^{\mathrm{proj}}, y_i^{\mathrm{proj}}, v_i, \Delta\psi_
 
 $$ \hat a_i=\mathbf1[c_i=-1]. $$
 
+Классический DBSCAN даёт только метку кластера. Непрерывный score для PR-AUC — адаптация, не формула Ester et al. \(d_k(\mathbf u_i)\) — расстояние до \(k\)-го соседа, \(k=\mathrm{MinPts}\); \(d_{\mathrm{core}}\) — расстояние до ближайшей core-точки (если core-точек нет, берётся \(d_k\)):
+
+$$ s_i=\max\bigl(d_k(\mathbf u_i),\, d_{\mathrm{core}}(\mathbf u_i)\bigr). $$
+
+Больший \(s_i\) означает более изолированную точку в пространстве \((\mathrm{proj},\,v,\,\Delta\psi)\): далеко и от \(k\)-го соседа, и от плотного режима движения. Бинарная разметка по-прежнему \(\hat a_i=\mathbf1[c_i=-1]\); score нужен только для ранжирования и PR-AUC.
+
 **Источники:**
 
 - Ester M., Kriegel H.-P., Sander J., Xu X. A Density-Based Algorithm for Discovering Clusters in Large Spatial Databases with Noise // Proceedings of the 2nd International Conference on Knowledge Discovery and Data Mining (KDD-96). AAAI Press, 1996. P. 226–231. [PDF](docs/methods/A%20Density-Based%20Algorithm%20for%20Discovering%20Clusters.pdf).
@@ -419,5 +425,15 @@ $$ Q^\star=\arg\max_{Q\subseteq\{1,\ldots,N\}} |Q| $$
 ## Частный случай для \(P\) и \(G\) ##
 
 $$ v_{ij}=\frac{d_{\mathrm{geo}}\left( (\mathrm{lat}_i,\mathrm{lon}_i), (\mathrm{lat}_j,\mathrm{lon}_j) \right)}{t_j-t_i}, \qquad \hat a_i=\mathbf1[i\notin Q^\star(P)]. $$
+
+Алгоритм Custers et al. даёт только множество \(Q^\star\). Непрерывный score для PR-AUC — адаптация. Для точки из \(Q^\star\) берём \(s_i=0\). Иначе в окне предшественников длины \(L\) считаем минимальное превышение \(v_+\) до ближайшей согласованной точки и геодезическое расстояние до неё:
+
+$$ s_i^{(v)}=\min_{\substack{j\in Q^\star\\ 0<|i-j|\le L}}\max\bigl(0,\,v_{ij}-v_+\bigr), \qquad s_i^{(d)}=\min_{\substack{j\in Q^\star\\ 0<|i-j|\le L}} d_{\mathrm{geo}}(p_i,p_j). $$
+
+Если в окне нет точек \(Q^\star\), минимум берётся по ближайшим по индексу элементам \(Q^\star\). Итоговый score:
+
+$$ s_i=s_i^{(v)}+\frac{s_i^{(d)}}{1000}. $$
+
+\(s_i^{(v)}\) — насколько пришлось бы поднять лимит скорости (м/с), чтобы встроить точку в согласованную цепочку; \(s_i^{(d)}/1000\) — смещение от этой цепочки в километрах. Бинарная разметка по-прежнему \(\hat a_i=\mathbf1[i\notin Q^\star]\).
 
 **Источник:** Custers B., van de Kerkhof M., Meulemans W., Speckmann B., Staals F. Maximum Physically Consistent Trajectories // ACM Transactions on Spatial Algorithms and Systems. 2021. Vol. 7, No. 4. Article 17. 33 p. DOI: [10.1145/3452378](https://doi.org/10.1145/3452378). [PDF](docs/methods/Maximum%20Physically%20Consistent%20Trajectories.pdf).

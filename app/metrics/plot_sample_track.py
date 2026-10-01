@@ -132,18 +132,48 @@ def _draw_basemap(axis, basemap, limits: Tuple[float, float, float, float]) -> N
     axis.tick_params(labelsize=8)
 
 
-def _story_indices(labels: np.ndarray, predicted: np.ndarray) -> list[int]:
-    """Индексы, которые нужны, чтобы глазами сверить пример: края, аномалия, ложные тревоги."""
+def _to_seconds(time: np.ndarray) -> np.ndarray:
+    """Приводит время к float-секундам. Для datetime64 единица — секунды."""
+    values = np.asarray(time)
+    if np.issubdtype(values.dtype, np.datetime64):
+        return values.astype("datetime64[ns]").astype(np.float64) / 1e9
+    if values.dtype.kind in {"U", "S", "O"}:
+        return values.astype("datetime64[ns]").astype(np.float64) / 1e9
+    return values.astype(np.float64)
+
+
+def _marker_sizes(count: int) -> Tuple[int, int, int, int]:
+    """Размеры точек: штатная, попадание, пропуск, ложная тревога."""
+    if count > 8_000:
+        return 8, 14, 18, 16
+    if count > 400:
+        return 18, 36, 48, 42
+    return 32, 70, 90, 80
+
+
+def _story_indices(labels: np.ndarray, predicted: np.ndarray, max_labels: int = 80) -> list[int]:
+    """Индексы, которые нужны, чтобы глазами сверить пример: края, аномалия, ложные тревоги.
+
+    На длинном ряде подписываются только края и несколько характерных точек,
+    иначе подписи закроют карту.
+    """
     count = int(labels.size)
     chosen = {0, count - 1}
     anomaly = np.flatnonzero(np.equal(labels, 0.0))
     if anomaly.size:
         chosen.add(int(anomaly[0]) - 1)
-        chosen.update(int(index) for index in anomaly)
         chosen.add(int(anomaly[-1]) + 1)
+        step = max(1, anomaly.size // max(1, max_labels // 4))
+        chosen.update(int(index) for index in anomaly[::step][: max_labels // 2])
     false_positive = np.flatnonzero(~np.equal(labels, 0.0) & np.equal(predicted, 0.0))
-    chosen.update(int(index) for index in false_positive)
-    return sorted(index for index in chosen if 0 <= index < count)
+    if false_positive.size:
+        step = max(1, false_positive.size // max(1, max_labels // 4))
+        chosen.update(int(index) for index in false_positive[::step][: max_labels // 4])
+    indices = sorted(index for index in chosen if 0 <= index < count)
+    if len(indices) > max_labels:
+        stride = max(1, len(indices) // max_labels)
+        indices = indices[::stride][:max_labels]
+    return indices
 
 
 def _annotate_indices(axis, lon: np.ndarray, lat: np.ndarray, indices: list[int]) -> None:
@@ -174,20 +204,23 @@ def _scatter_mask(axis, lon: np.ndarray, lat: np.ndarray, mask: np.ndarray, **st
 def _draw_truth_map(axis, lon, lat, labels, reference_lon, reference_lat, basemap, limits) -> None:
     """Левая панель: записанный трек, аномальная петля и эталонная интерполяция."""
     _draw_basemap(axis, basemap, limits)
-    axis.plot(lon, lat, color="white", linewidth=5.6, zorder=2, solid_capstyle="round")
-    axis.plot(lon, lat, color=_COLOR_TRACK, linewidth=2.9, zorder=3, solid_capstyle="round")
+    normal_size, hit_size, _, _ = _marker_sizes(lon.size)
+    line_width = 0.7 if lon.size > 8_000 else 2.9
+    halo_width = 2.0 if lon.size > 8_000 else 5.6
+    axis.plot(lon, lat, color="white", linewidth=halo_width, zorder=2, solid_capstyle="round")
+    axis.plot(lon, lat, color=_COLOR_TRACK, linewidth=line_width, zorder=3, solid_capstyle="round")
     axis.plot(
         reference_lon,
         reference_lat,
         color=_COLOR_REFERENCE,
         linestyle=(0, (7, 4)),
-        linewidth=2.8,
+        linewidth=max(1.2, line_width),
         zorder=4,
         solid_capstyle="round",
     )
     normal = ~np.equal(labels, 0.0)
-    _scatter_mask(axis, lon, lat, normal, s=32, c=_COLOR_NORMAL, zorder=5)
-    _scatter_mask(axis, lon, lat, ~normal, s=70, c=_COLOR_ANOMALY, zorder=6)
+    _scatter_mask(axis, lon, lat, normal, s=normal_size, c=_COLOR_NORMAL, zorder=5, linewidths=0.15)
+    _scatter_mask(axis, lon, lat, ~normal, s=hit_size, c=_COLOR_ANOMALY, zorder=6, linewidths=0.15)
     axis.set_title("Изначальный трек: штатный ход и аномалия")
     axis.legend(
         handles=[
@@ -207,11 +240,17 @@ def _draw_prediction_map(axis, lon, lat, labels, predicted, basemap, limits) -> 
     gt_anomaly = np.equal(labels, 0.0)
     pred_anomaly = np.equal(predicted, 0.0)
     accepted = ~pred_anomaly
-    axis.plot(lon[accepted], lat[accepted], color=_COLOR_ACCEPTED, linewidth=1.4, zorder=2)
-    _scatter_mask(axis, lon, lat, ~gt_anomaly & accepted, s=32, c=_COLOR_NORMAL, zorder=3)
-    _scatter_mask(axis, lon, lat, gt_anomaly & pred_anomaly, s=70, c=_COLOR_HIT)
-    _scatter_mask(axis, lon, lat, gt_anomaly & accepted, s=90, c=_COLOR_ANOMALY, marker="X", zorder=5, linewidths=1.2)
-    _scatter_mask(axis, lon, lat, ~gt_anomaly & pred_anomaly, s=80, c=_COLOR_FALSE, marker="^", zorder=5)
+    normal_size, hit_size, miss_size, false_size = _marker_sizes(lon.size)
+    line_width = 0.5 if lon.size > 8_000 else 1.4
+    axis.plot(lon[accepted], lat[accepted], color=_COLOR_ACCEPTED, linewidth=line_width, zorder=2)
+    _scatter_mask(axis, lon, lat, ~gt_anomaly & accepted, s=normal_size, c=_COLOR_NORMAL, zorder=3, linewidths=0.15)
+    _scatter_mask(axis, lon, lat, gt_anomaly & pred_anomaly, s=hit_size, c=_COLOR_HIT, linewidths=0.15)
+    _scatter_mask(
+        axis, lon, lat, gt_anomaly & accepted, s=miss_size, c=_COLOR_ANOMALY, marker="X", zorder=5, linewidths=0.6
+    )
+    _scatter_mask(
+        axis, lon, lat, ~gt_anomaly & pred_anomaly, s=false_size, c=_COLOR_FALSE, marker="^", zorder=5, linewidths=0.15
+    )
     axis.set_title("Разметка модели")
     axis.legend(
         handles=[
@@ -257,15 +296,19 @@ def plot_sample_track(
     ground_truth: TrackSeries,
     output_path: Optional[Union[str, Path]] = None,
     title: Optional[str] = None,
+    figsize: Tuple[float, float] = (13.8, 7.2),
+    annotate: Optional[bool] = None,
 ) -> Optional[Path]:
     """Рисует prediction и ground truth.
 
     Без ``output_path`` открывает интерактивное окно. С путём сохраняет PNG по указанному адресу.
     ``title`` заменяет общий заголовок рисунка.
+    ``figsize`` — размер фигуры в дюймах. ``annotate`` включает номера точек;
+    если не задан, подписи ставятся только на коротких рядах.
     """
     time, lon, lat, labels = ground_truth
     _, _, _, predicted = prediction
-    time = np.asarray(time, dtype=np.float64)
+    time = _to_seconds(time)
     lon = np.asarray(lon, dtype=np.float64)
     lat = np.asarray(lat, dtype=np.float64)
     labels = np.asarray(labels, dtype=np.float64)
@@ -273,22 +316,21 @@ def plot_sample_track(
     limits = _padded_limits(lon, lat)
     basemap = _load_basemap(limits[0], limits[2], limits[1], limits[3])
     reference_lat, reference_lon = _reference_coordinates(time, lat, lon, labels)
-    figure, axes = plt.subplots(1, 2, figsize=(13.8, 7.2))
+    figure, axes = plt.subplots(1, 2, figsize=figsize)
     _draw_truth_map(axes[0], lon, lat, labels, reference_lon, reference_lat, basemap, limits)
     _draw_prediction_map(axes[1], lon, lat, labels, predicted, basemap, limits)
-    indices = _story_indices(labels, predicted)
-    _annotate_indices(axes[0], lon, lat, indices)
-    _annotate_indices(axes[1], lon, lat, indices)
-    figure.suptitle(title or "Тестовый трек у Владивостока: точки 8–12 уходят в петлю", fontsize=13)
-    figure.text(
-        0.5,
-        0.01,
-        "Подложка: OpenStreetMap. Синтетические точки. Числа - индексы ряда.",
-        ha="center",
-        fontsize=8,
-        color="#4b5563",
-    )
-    figure.subplots_adjust(left=0.06, right=0.98, top=0.88, bottom=0.10, wspace=0.18)
+    if annotate is None:
+        annotate = labels.size <= 80
+    if annotate:
+        indices = _story_indices(labels, predicted)
+        _annotate_indices(axes[0], lon, lat, indices)
+        _annotate_indices(axes[1], lon, lat, indices)
+    figure.suptitle(title or "Тестовый трек у Владивостока: точки 8–12 уходят в петлю", fontsize=14)
+    caption = "Подложка: OpenStreetMap."
+    if annotate:
+        caption += " Числа — индексы ряда."
+    figure.text(0.5, 0.01, caption, ha="center", fontsize=8, color="#4b5563")
+    figure.subplots_adjust(left=0.05, right=0.98, top=0.90, bottom=0.08, wspace=0.14)
     if output_path is None:
         plt.show()
         return None
