@@ -74,7 +74,7 @@ $$ \hat a_i=\mathbf1[s_i>\tau]. $$
 
 Для ARIMA фактическая аномальная метка \(y_i=0\) в процессе построения прогноза не нужна.
 
-**Публикация:** Qin Yu, Jibin Lyu, Lirui Jiang, *An Improved ARIMA-Based Traffic Anomaly Detection Algorithm for Wireless Sensor Networks*, 2016. Статья опубликована в открытом доступе.
+**Источник:** Qin Yu, Lyu Jibin, Lirui Jiang. An Improved ARIMA-Based Traffic Anomaly Detection Algorithm for Wireless Sensor Networks // International Journal of Distributed Sensor Networks. 2016. Vol. 2016. Article ID 9653230. 9 p. DOI: [10.1155/2016/9653230](https://doi.org/10.1155/2016/9653230). [PDF](docs/methods/An%20Improved%20ARIMA-Based%20Traffic%20Anomaly%20Detection%20Algorithm%20for%20Wireless%20Sensor%20Networks.pdf).
 
 # Калмановский фильтр с моделью постоянной скорости #
 
@@ -138,7 +138,7 @@ $$ \hat a_i=\mathbf1[s_i>\tau], \qquad \hat y_i= \begin{cases} 0,&s_i>\tau,\\ 1,
 
 Такой вариант непосредственно соответствует ситуации, когда физически правдоподобная траектория имеет небольшие локальные ошибки измерений, а настоящий скачок вызывает большую инновацию.
 
-**Публикация:** R. E. Kalman, *A New Approach to Linear Filtering and Prediction Problems*, 1960.
+**Источник:** Kalman R. E. A New Approach to Linear Filtering and Prediction Problems // Journal of Basic Engineering. 1960. Vol. 82, No. 1. P. 35–45. DOI: [10.1115/1.3662552](https://doi.org/10.1115/1.3662552).
 
 # Bootstrap Particle Filter / SIR #
 
@@ -190,7 +190,7 @@ $$ \hat a_i=\mathbf1[s_i>\tau]. $$
 
 Преимущество по сравнению с KF заключается в том, что распределение состояний не обязано быть одним гауссовским облаком. Это потенциально полезно для поворотов, развилок и других мультимодальных движений.
 
-**Публикация:** Arulampalam et al., *A Tutorial on Particle Filters for Online Nonlinear/Non-Gaussian Bayesian Tracking*, 2002.
+**Источник:** Arulampalam M. S., Maskell S., Gordon N., Clapp T. A Tutorial on Particle Filters for Online Nonlinear/Non-Gaussian Bayesian Tracking // IEEE Transactions on Signal Processing. 2002. Vol. 50, No. 2. P. 174–188. DOI: [10.1109/78.978374](https://doi.org/10.1109/78.978374). [PDF](docs/methods/A%20Tutorial%20on%20Particle%20Filters%20for%20Online.pdf).
 
 # Gaussian Process Regression с RBF-ядром #
 
@@ -246,10 +246,10 @@ $$ \hat a_i=\mathbf1\left[ (\mathbf z_i-\boldsymbol\mu_i)^T \Sigma_i^{-1} (\math
 
 Этот подход особенно интересен для вашей задачи, потому что GP непосредственно моделирует неопределённость прогноза, а не только одну ожидаемую координату.
 
-**Публикации:**
+**Источники:**
 
-- Smith et al., *Maritime abnormality detection using Gaussian processes*, 2013/2014 — непосредственно посвящена морским траекториям.
-- Более современная работа по GP anomaly detection в динамических системах (arXiv, 2026).
+- Smith M., Reece S., Roberts S., Psorakis I., Rezek I. Maritime Abnormality Detection Using Gaussian Processes // Knowledge and Information Systems. 2014. Vol. 38, No. 3. P. 717–741. DOI: [10.1007/s10115-013-0685-z](https://doi.org/10.1007/s10115-013-0685-z).
+- Penacho Riveiros A., Bastianello N., Barreau M. Model-free Anomaly Detection for Dynamical Systems with Gaussian Processes. 2026. 6 p. [PDF](docs/methods/Model-free%20Anomaly%20Detection%20for.pdf).
 
 # Hidden Markov Model #
 
@@ -313,7 +313,7 @@ $$ \hat a_i=\mathbf1[s_i>\tau]. $$
 
 Для вашей задачи этот метод особенно интересен для аномалий типа «спираль», изменение режима движения, неожиданные остановки и т. п., поскольку HMM моделирует не только отдельные значения, но и переходы между состояниями.
 
-**Публикация:** Toloue, Jahan, *Anomalous Behavior Detection of Marine Vessels Based on Hidden Markov Model*, 2018. Полный авторский текст доступен свободно.
+**Источник:** Toloue K. F., Jahan M. V. Anomalous Behavior Detection of Marine Vessels Based on Hidden Markov Model // 2018 6th Iranian Joint Congress on Fuzzy and Intelligent Systems (CFIS). IEEE, 2018. P. 10–12. [PDF](docs/methods/AnomalousBehaviorDetectionofMarineVessels.pdf).
 
 # Hampel Filter #
 
@@ -363,7 +363,7 @@ $$ \hat a_i=\mathbf1[s_i^{(v)}>\tau_v]. $$
 
 В этом виде метод хорошо подходит для единичных выбросов, но не предназначен для длительных аномальных сегментов, которые сами образуют устойчивый локальный режим.
 
-**Публикация:** Roos-Hoefgeest Toribio et al., *A Novel Approach to Speed Up Hampel Filter for Outlier Detection*, 2025, открытый доступ MDPI.
+**Источник:** Roos-Hoefgeest Toribio M., Garnung Menéndez A., Roos-Hoefgeest Toribio S., Álvarez García I. A Novel Approach to Speed Up Hampel Filter for Outlier Detection // Sensors. 2025. Vol. 25. Article 3319. DOI: [10.3390/s25113319](https://doi.org/10.3390/s25113319). [PDF](docs/methods/A%20Novel%20Approach%20to%20Speed%20Up%20Hampel%20Filter%20for%20Outlier%20Detection.pdf).
 
 # DBSCAN #
 
@@ -407,10 +407,10 @@ $$ \hat y_i= \begin{cases} 0,&c_i=-1,\\ 1,&c_i\ne-1. \end{cases} $$
 
 Для морских траекторий есть непосредственно соответствующее исследование, где DBSCAN применяется к AIS с пространственными и динамическими признаками.
 
-**Публикации:**
+**Источники:**
 
-- Ester et al., *A Density-Based Algorithm for Discovering Clusters in Large Spatial Databases with Noise*, 1996.
-- Han, Armenakis, Jadidi, *DBSCAN Optimization for Improving Marine Trajectory Clustering and Anomaly Detection*, 2020.
+- Ester M., Kriegel H.-P., Sander J., Xu X. A Density-Based Algorithm for Discovering Clusters in Large Spatial Databases with Noise // Proceedings of the 2nd International Conference on Knowledge Discovery and Data Mining (KDD-96). AAAI Press, 1996. P. 226–231. [PDF](docs/methods/A%20Density-Based%20Algorithm%20for%20Discovering%20Clusters.pdf).
+- Han X., Armenakis C., Jadidi M. DBSCAN Optimization for Improving Marine Trajectory Clustering and Anomaly Detection // The International Archives of the Photogrammetry, Remote Sensing and Spatial Information Sciences. 2020. Vol. XLIII-B4-2020. P. 455–461. DOI: [10.5194/isprs-archives-XLIII-B4-2020-455-2020](https://doi.org/10.5194/isprs-archives-XLIII-B4-2020-455-2020). [PDF](docs/methods/DBSCAN%20OPTIMIZATION%20FOR%20IMPROVING%20MARINE%20TRAJECTORY%20CLUSTERING.pdf).
 
 # Local Outlier Factor #
 
@@ -456,7 +456,7 @@ $$ \hat a_i=\mathbf1[s_i>\tau_{\mathrm{LOF}}]. $$
 
 LOF особенно полезен в ситуации, когда «аномальность» определяется не глобальной редкостью, а отличием от локального режима.
 
-**Публикация:** Breunig et al., *LOF: Identifying Density-Based Local Outliers*, 2000.
+**Источник:** Breunig M. M., Kriegel H.-P., Ng R. T., Sander J. LOF: Identifying Density-Based Local Outliers // Proceedings of the 2000 ACM SIGMOD International Conference on Management of Data. Dallas, USA. ACM, 2000. P. 93–104. DOI: [10.1145/342009.335388](https://doi.org/10.1145/342009.335388). [PDF](<docs/methods/LOF_ Identifying Density-Based Local Outliers.pdf>).
 
 # Isolation Forest #
 
@@ -496,7 +496,7 @@ $$ \hat a_i=\mathbf1[s_i>\tau]. $$
 
 Метод не требует явного построения модели нормального движения и поэтому хорошо подходит как baseline для большой выборки.
 
-**Публикация:** Liu, Ting, Zhou, *Isolation-Based Anomaly Detection*, 2012.
+**Источник:** Liu F. T., Ting K. M., Zhou Z.-H. Isolation-Based Anomaly Detection // ACM Transactions on Knowledge Discovery from Data. 2012. Vol. 6, No. 1. Article 3. 39 p. DOI: [10.1145/2133360.2133363](https://doi.org/10.1145/2133360.2133363). [PDF](docs/methods/Isolation-Based%20Anomaly%20Detection.pdf).
 
 # One-Class SVM #
 
@@ -540,7 +540,7 @@ $$ \hat a_i=\mathbf1[s_i>0]. $$
 
 Иными словами, модель учится описывать support нормального распределения, а всё, что оказывается за его границей, считается аномальным.
 
-**Публикация:** Schölkopf et al., *Estimating the Support of a High-Dimensional Distribution*, 2001.
+**Источник:** Schölkopf B., Platt J. C., Shawe-Taylor J., Smola A. J., Williamson R. C. Estimating the Support of a High-Dimensional Distribution // Neural Computation. 2001. Vol. 13, No. 7. P. 1443–1471. DOI: [10.1162/089976601750264965](https://doi.org/10.1162/089976601750264965). В `docs/methods/` лежит технический отчёт Microsoft Research MSR-TR-99-87 (27 November 1999; revised 18 September 2000): [PDF](docs/methods/Estimating%20the%20Support%20of%20a%20High-Dimensional%20Distribution.pdf).
 
 # Robust PCA / Principal Component Pursuit #
 
@@ -592,7 +592,7 @@ $$ s_i=\frac{1}{|W_i|}\sum_{W:\, i\in W} \|S_W(i)\|. $$
 
 $$ \hat a_i=\mathbf1[s_i>\tau]. $$
 
-**Публикация:** Candès et al., *Robust Principal Component Analysis*, 2009/2011. Полный текст доступен на arXiv.
+**Источник:** Candès E. J., Li X., Ma Y., Wright J. Robust Principal Component Analysis? // Journal of the ACM. 2011. Vol. 58, No. 3. Article 11. P. 1–37. DOI: [10.1145/1970392.1970395](https://doi.org/10.1145/1970392.1970395). В `docs/methods/` лежит препринт arXiv:0912.3599v1 (18 December 2009): [PDF](docs/methods/Robust%20Principal%20Component%20Analysis.pdf).
 
 # LSTM Autoencoder / EncDec-AD #
 
@@ -638,7 +638,7 @@ $$ \hat a_i=\mathbf1[s_i>\tau]. $$
 
 Основная идея — модель учится восстанавливать нормальную динамику, поэтому длительная аномальная последовательность должна давать систематически повышенный reconstruction error.
 
-**Публикация:** Malhotra et al., *LSTM-based Encoder-Decoder for Multi-sensor Anomaly Detection*, 2016.
+**Источник:** Malhotra P., Ramakrishnan A., Anand G., Vig L., Agarwal P., Shroff G. LSTM-based Encoder-Decoder for Multi-sensor Anomaly Detection // ICML 2016 Anomaly Detection Workshop. New York, 2016. arXiv: [1607.00148](https://arxiv.org/abs/1607.00148). [PDF](docs/methods/LSTM-based%20Encoder-Decoder%20for%20Multi-sensor%20Anomaly%20Detection.pdf).
 
 # Temporal Convolutional Network #
 
@@ -680,7 +680,7 @@ $$ \mathbf r_i=\mathbf z_i-\hat{\mathbf z}_i, \qquad s_i=\mathbf r_i^T\Sigma^{-1
 
 Это уже очень близко к вашей исходной идее «модель должна понять нормальную последовательность, а аномальная точка должна отличаться от прогноза».
 
-**Публикация:** He, Zhao, *Temporal Convolutional Networks for Anomaly Detection in Time Series*, 2019. CC BY 3.0.
+**Источник:** He Y., Zhao J. Temporal Convolutional Networks for Anomaly Detection in Time Series // Journal of Physics: Conference Series. 2019. Vol. 1213. Article 042050. DOI: [10.1088/1742-6596/1213/4/042050](https://doi.org/10.1088/1742-6596/1213/4/042050). [PDF](docs/methods/Temporal_Convolutional_Networks_for_Anomaly_Detect.pdf).
 
 # DONUT — VAE для anomaly detection #
 
@@ -720,7 +720,7 @@ $$ s_i=-\log p_\theta(X_i). $$
 
 Для длительных аномалий такая постановка имеет смысл, поскольку аномалия может быть не одним экстремальным значением, а последовательностью, маловероятной для распределения нормальных окон.
 
-**Публикация:** Xu et al., *Unsupervised Anomaly Detection via Variational Auto-Encoder for Seasonal KPIs in Web Applications (Donut)*, 2018.
+**Источник:** Xu H., Chen W., Zhao N., Li Z., Bu J., Li Z., Liu Y., Zhao Y., Pei D., Feng Y., Chen J., Wang Z., Qiao H. Unsupervised Anomaly Detection via Variational Auto-Encoder for Seasonal KPIs in Web Applications // Proceedings of The Web Conference 2018 (WWW '18). Lyon, France, 23–27 April 2018. ACM, 2018. 12 p. DOI: [10.1145/3178876.3185996](https://doi.org/10.1145/3178876.3185996). arXiv: [1802.03903](https://arxiv.org/abs/1802.03903). [PDF](docs/methods/Unsupervised%20Anomaly%20Detection%20via%20Variational%20Auto-Encoder.pdf).
 
 # Anomaly Transformer #
 
@@ -764,7 +764,7 @@ $$ \hat a_i=\mathbf1[s_i>\tau]. $$
 
 То есть в данном случае модель не просто смотрит на расстояние до прогноза, а оценивает, насколько временные связи точки отличаются от характерных ассоциаций нормальной последовательности.
 
-**Публикация:** Xu et al., *Anomaly Transformer: Time Series Anomaly Detection with Association Discrepancy*, 2021.
+**Источник:** Xu J., Wu H., Wang J., Long M. Anomaly Transformer: Time Series Anomaly Detection with Association Discrepancy // International Conference on Learning Representations (ICLR). 2022. arXiv: [2110.02642](https://arxiv.org/abs/2110.02642). [PDF](docs/methods/ANOMALY%20TRANSFORMER%20TIME%20SERIES%20ANOMALY.pdf).
 
 # Spatio-Temporal GNN — STGVAD #
 
@@ -832,7 +832,7 @@ $$ \hat a_i=\mathbf1[s_i>\tau]. $$
 
 В STGVAD именно временные связи внутри траекторий и пространственные взаимодействия между судами объединяются в одном графовом представлении; для оценки авторы также используют искусственно инжектированные аномалии в AIS.
 
-**Публикация:** Kim et al., *STGVAD: Spatio-Temporal Graph-Based Vessel Behavior Anomaly Detection*, IEEE Access, 2026.
+**Источник:** Kim J., Kim M., Hwang Y., Bae S., Cho D. J., Lee W., Park H. STGVAD: Spatio-Temporal Graph-based Vessel Behavior Anomaly Detection // IEEE Access. 2025. DOI: [10.1109/ACCESS.2025.3609783](https://doi.org/10.1109/ACCESS.2025.3609783). В `docs/methods/` лежит авторская версия, принятая к публикации. [PDF](docs/methods/STGVAD_Spatio-Temporal_Graph-Based_Vessel_Behavior.pdf).
 
 # Optimal Speed-Bounded Trajectory #
 
@@ -884,4 +884,4 @@ $$ \hat y_i= \begin{cases} 0,&i\notin Q^\star,\\ 1,&i\in Q^\star. \end{cases} $$
 
 Это существенно сильнее простой проверки соседних точек: алгоритм ищет максимально длинную физически согласованную траекторию и рассматривает остальные измерения как выбросы. Custers et al. формально рассматривают именно физически согласованные траектории с ограничениями на скорость и ускорение.
 
-**Публикация:** Custers et al., *Maximum Physically Consistent Trajectories*, 2021.
+**Источник:** Custers B., van de Kerkhof M., Meulemans W., Speckmann B., Staals F. Maximum Physically Consistent Trajectories // ACM Transactions on Spatial Algorithms and Systems. 2021. Vol. 7, No. 4. Article 17. 33 p. DOI: [10.1145/3452378](https://doi.org/10.1145/3452378). [PDF](docs/methods/Maximum%20Physically%20Consistent%20Trajectories.pdf).
