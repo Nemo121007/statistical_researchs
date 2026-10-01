@@ -7,11 +7,52 @@
 """
 
 import math
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
 Series = Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+MetricRow = Tuple[str, str]
+
+METRIC_TABLE_ROWS: Tuple[MetricRow, ...] = (
+    ("point_precision", "Point precision"),
+    ("point_recall", "Point recall"),
+    ("point_f1", "Point F1"),
+    ("pr_auc", "PR-AUC"),
+    ("affiliation_precision", "Affiliation precision"),
+    ("affiliation_recall", "Affiliation recall"),
+    ("affiliation_f1", "Affiliation F1"),
+    ("detection_delay_median", "Delay median, с"),
+    ("detection_delay_mean", "Delay mean, с"),
+    ("detection_delay_p95", "Delay p95, с"),
+    ("detection_delay_n_events", "Events"),
+    ("detection_delay_n_detected", "Detected"),
+    ("detection_delay_n_undetected", "Undetected"),
+    ("geodesic_rmse", "Geodesic RMSE, м"),
+    ("hausdorff_distance", "Hausdorff, м"),
+    ("distance_loss", "Distance loss, м"),
+    ("distance_loss_ratio", "Distance loss ratio"),
+)
+
+_COUNT_METRIC_KEYS = frozenset(
+    {
+        "detection_delay_n_events",
+        "detection_delay_n_detected",
+        "detection_delay_n_undetected",
+    }
+)
+_RATE_METRIC_KEYS = frozenset(
+    {
+        "point_precision",
+        "point_recall",
+        "point_f1",
+        "pr_auc",
+        "affiliation_precision",
+        "affiliation_recall",
+        "affiliation_f1",
+        "distance_loss_ratio",
+    }
+)
 
 _EARTH_RADIUS_M = 6_371_000.0
 _RECALL_GRID_SIZE = 8192
@@ -653,6 +694,61 @@ class CalculateMetrics:
         return loss, _ratio(loss, reference_length)
 
 
+def _nfmt_int(value: int) -> str:
+    return f"{value:,}".replace(",", " ")
+
+
+def _format_decimal(number: float, decimals: int = 2) -> str:
+    """Дробное число; при |x| >= 1000 — пробелы между тройками разрядов."""
+    if abs(number) >= 1000:
+        return f"{number:,.{decimals}f}".replace(",", " ")
+    return f"{number:.{decimals}f}"
+
+
+def format_metric_value(key: str, value: Union[float, int, None]) -> str:
+    """Форматирует одно значение метрики для таблицы."""
+    if value is None:
+        return "—"
+    number = float(value)
+    if not np.isfinite(number):
+        return "—"
+    if key in _COUNT_METRIC_KEYS:
+        return _nfmt_int(int(round(number)))
+    if key in _RATE_METRIC_KEYS:
+        return f"{number:.4f}"
+    return _format_decimal(number, 2)
+
+
+def format_metrics_table(
+    metrics: Dict[str, float],
+    rows: Optional[Sequence[MetricRow]] = None,
+) -> str:
+    """Возвращает текстовую таблицу метрик."""
+    chosen = tuple(rows) if rows is not None else METRIC_TABLE_ROWS
+    label_width = max(len(label) for _, label in chosen)
+    value_width = 16
+    header = f"{'Метрика':<{label_width}} | {'Значение':>{value_width}}"
+    divider = "-" * len(header)
+    lines = [header, divider]
+    for key, label in chosen:
+        cell = format_metric_value(key, metrics.get(key, float("nan")))
+        lines.append(f"{label:<{label_width}} | {cell:>{value_width}}")
+    return "\n".join(lines)
+
+
+def print_metrics_table(
+    metrics: Dict[str, float],
+    title: Optional[str] = None,
+    rows: Optional[Sequence[MetricRow]] = None,
+    prefix: str = "",
+) -> None:
+    """Печатает метрики таблицей вместо сырого словаря."""
+    if title:
+        print(f"{prefix}{title}")
+    for line in format_metrics_table(metrics, rows=rows).splitlines():
+        print(f"{prefix}{line}")
+
+
 def _sample_track() -> Tuple[Series, Series, np.ndarray]:
     """Короткий трек: штатный ход на северо-восток и петля на точках 8–12."""
     count = 21
@@ -677,10 +773,8 @@ def _sample_track() -> Tuple[Series, Series, np.ndarray]:
 
 
 def _print_metrics(title: str, metrics: Dict[str, float]) -> None:
-    """Печатает словарь метрик выровненными строками."""
-    print(title)
-    for name, value in metrics.items():
-        print(f"  {name:<32} {value:12.4f}")
+    """Печатает метрики таблицей."""
+    print_metrics_table(metrics, title=title, prefix="  ")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Отрисовка трека на карте OpenStreetMap.
+"""Отрисовка трека на фоне растровой карты.
 
 Каждый ряд — кортеж (время, долгота, широта, метка). Метка 0 — аномалия.
 """
@@ -8,7 +8,7 @@ import io
 import math
 import urllib.request
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union
 
 import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
@@ -18,8 +18,9 @@ from PIL import Image
 
 TrackSeries = Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
 
-_MAP_TILE_URL = "https://tile.openstreetmap.org/{zoom}/{x}/{y}.png"
-_MAP_USER_AGENT = "statistical-researchs-metrics-demo/0.1"
+_OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+_MAP_USER_AGENT = "statistical-researchs-metrics/0.1"
+_MAP_CAPTION = "Подложка: OpenStreetMap (нужен доступ в интернет)."
 _COLOR_NORMAL = "#24527a"
 _COLOR_ANOMALY = "#b23a48"
 _COLOR_REFERENCE = "#e8590c"
@@ -27,7 +28,7 @@ _COLOR_TRACK = "#071a33"
 _COLOR_HIT = "#1f7a4d"
 _COLOR_FALSE = "#d97706"
 _COLOR_ACCEPTED = "#1f2933"
-_TILE_CACHE: dict[Tuple[int, int, int], np.ndarray] = {}
+_TILE_MEMORY: dict[Tuple[int, int, int], np.ndarray] = {}
 
 
 def _tile_index(lon: float, lat: float, zoom: int) -> Tuple[int, int]:
@@ -66,18 +67,18 @@ def _choose_zoom(west: float, south: float, east: float, north: float, max_tiles
     return 0
 
 
-def _download_map_tile(x_tile: int, y_tile: int, zoom: int) -> np.ndarray:
-    """Скачивает один растровый тайл подложки. Повторный запрос берётся из памяти."""
+def _download_tile(zoom: int, x_tile: int, y_tile: int) -> np.ndarray:
+    """Один тайл OSM: скачивание и раскладка в RGB-массив."""
     key = (zoom, x_tile, y_tile)
-    cached = _TILE_CACHE.get(key)
+    cached = _TILE_MEMORY.get(key)
     if cached is not None:
         return cached
-    url = _MAP_TILE_URL.format(zoom=zoom, x=x_tile, y=y_tile)
+    url = _OSM_TILE_URL.format(z=zoom, x=x_tile, y=y_tile)
     request = urllib.request.Request(url, headers={"User-Agent": _MAP_USER_AGENT})
-    with urllib.request.urlopen(request, timeout=20) as response:
+    with urllib.request.urlopen(request, timeout=15) as response:
         payload = response.read()
     image = np.asarray(Image.open(io.BytesIO(payload)).convert("RGB"))
-    _TILE_CACHE[key] = image
+    _TILE_MEMORY[key] = image
     return image
 
 
@@ -86,23 +87,34 @@ def _load_basemap(
     south: float,
     east: float,
     north: float,
-    zoom: Optional[int] = None,
 ) -> Optional[Tuple[np.ndarray, Tuple[float, float, float, float]]]:
-    """Собирает подложку. Возвращает изображение и границы (запад, восток, юг, север)."""
+    """Склеивает тайлы OSM для прямоугольника (запад, юг, восток, север)."""
     try:
-        chosen = _choose_zoom(west, south, east, north) if zoom is None else zoom
-        x_west, y_north, x_east, y_south = _tile_span(west, south, east, north, chosen)
+        zoom = _choose_zoom(west, south, east, north)
+        x_west, y_north, x_east, y_south = _tile_span(west, south, east, north, zoom)
         rows = []
         for y_tile in range(y_north, y_south + 1):
-            row = [_download_map_tile(x_tile, y_tile, chosen) for x_tile in range(x_west, x_east + 1)]
+            row = [_download_tile(zoom, x_tile, y_tile) for x_tile in range(x_west, x_east + 1)]
             rows.append(np.concatenate(row, axis=1))
         image = np.concatenate(rows, axis=0)
-        bound_west, _, _, bound_north = _tile_bounds(x_west, y_north, chosen)
-        _, bound_south, bound_east, _ = _tile_bounds(x_east, y_south, chosen)
+        bound_west, _, _, bound_north = _tile_bounds(x_west, y_north, zoom)
+        _, bound_south, bound_east, _ = _tile_bounds(x_east, y_south, zoom)
         return image, (bound_west, bound_east, bound_south, bound_north)
-    except (OSError, ValueError) as error:
-        print(f"Подложку карты загрузить не удалось ({error}). Точки нарисованы без карты.")
+    except OSError as error:
+        print(f"Подложку OSM загрузить не удалось ({error}). Рисуется только трек.")
         return None
+
+
+def _limits_from_bbox(bbox: Sequence[float]) -> Tuple[float, float, float, float]:
+    """Преобразует bbox [юг, запад, север, восток] в (запад, восток, юг, север)."""
+    if len(bbox) != 4:
+        raise ValueError("bbox должен содержать четыре числа: [юг, запад, север, восток]")
+    south, west, north, east = (float(value) for value in bbox)
+    if south >= north:
+        raise ValueError("bbox: южная граница должна быть меньше северной")
+    if west >= east:
+        raise ValueError("bbox: западная граница должна быть меньше восточной")
+    return west, east, south, north
 
 
 def _padded_limits(lon: np.ndarray, lat: np.ndarray) -> Tuple[float, float, float, float]:
@@ -119,17 +131,34 @@ def _padded_limits(lon: np.ndarray, lat: np.ndarray) -> Tuple[float, float, floa
 
 def _draw_basemap(axis, basemap, limits: Tuple[float, float, float, float]) -> None:
     """Кладёт карту на оси и выставляет географический масштаб."""
+    west, east, south, north = limits
     if basemap is not None:
         image, extent = basemap
-        west, east, south, north = extent
-        axis.imshow(image, extent=(west, east, south, north), origin="upper", interpolation="bilinear", zorder=0)
-    west, east, south, north = limits
+        map_west, map_east, map_south, map_north = extent
+        axis.imshow(
+            image,
+            extent=(map_west, map_east, map_south, map_north),
+            origin="upper",
+            interpolation="bilinear",
+            zorder=0,
+            clip_on=True,
+        )
+    else:
+        axis.set_facecolor("#f4f4f4")
     axis.set_xlim(west, east)
     axis.set_ylim(south, north)
+    axis.margins(0)
     axis.set_aspect(1.0 / math.cos(math.radians((south + north) / 2.0)), adjustable="box")
     axis.set_xlabel("Долгота, °")
     axis.set_ylabel("Широта, °")
     axis.tick_params(labelsize=8)
+
+
+def _track_line(axis, lon: np.ndarray, lat: np.ndarray, **style) -> None:
+    """Линия трека с обрезкой по границам окна карты."""
+    style.setdefault("clip_on", True)
+    style.setdefault("alpha", 1.0)
+    axis.plot(lon, lat, **style)
 
 
 def _to_seconds(time: np.ndarray) -> np.ndarray:
@@ -188,6 +217,7 @@ def _annotate_indices(axis, lon: np.ndarray, lat: np.ndarray, indices: list[int]
             fontsize=8,
             color=_COLOR_ACCEPTED,
             zorder=5,
+            clip_on=True,
         )
         text.set_path_effects([path_effects.withStroke(linewidth=2.6, foreground="white")])
 
@@ -198,6 +228,8 @@ def _scatter_mask(axis, lon: np.ndarray, lat: np.ndarray, mask: np.ndarray, **st
         style.setdefault("zorder", 4)
         style.setdefault("edgecolors", "white")
         style.setdefault("linewidths", 0.6)
+        style.setdefault("clip_on", True)
+        style.setdefault("alpha", 1.0)
         axis.scatter(lon[mask], lat[mask], **style)
 
 
@@ -207,9 +239,10 @@ def _draw_truth_map(axis, lon, lat, labels, reference_lon, reference_lat, basema
     normal_size, hit_size, _, _ = _marker_sizes(lon.size)
     line_width = 0.7 if lon.size > 8_000 else 2.9
     halo_width = 2.0 if lon.size > 8_000 else 5.6
-    axis.plot(lon, lat, color="white", linewidth=halo_width, zorder=2, solid_capstyle="round")
-    axis.plot(lon, lat, color=_COLOR_TRACK, linewidth=line_width, zorder=3, solid_capstyle="round")
-    axis.plot(
+    _track_line(axis, lon, lat, color="white", linewidth=halo_width, zorder=2, solid_capstyle="round")
+    _track_line(axis, lon, lat, color=_COLOR_TRACK, linewidth=line_width, zorder=3, solid_capstyle="round")
+    _track_line(
+        axis,
         reference_lon,
         reference_lat,
         color=_COLOR_REFERENCE,
@@ -242,7 +275,7 @@ def _draw_prediction_map(axis, lon, lat, labels, predicted, basemap, limits) -> 
     accepted = ~pred_anomaly
     normal_size, hit_size, miss_size, false_size = _marker_sizes(lon.size)
     line_width = 0.5 if lon.size > 8_000 else 1.4
-    axis.plot(lon[accepted], lat[accepted], color=_COLOR_ACCEPTED, linewidth=line_width, zorder=2)
+    _track_line(axis, lon[accepted], lat[accepted], color=_COLOR_ACCEPTED, linewidth=line_width, zorder=2)
     _scatter_mask(axis, lon, lat, ~gt_anomaly & accepted, s=normal_size, c=_COLOR_NORMAL, zorder=3, linewidths=0.15)
     _scatter_mask(axis, lon, lat, gt_anomaly & pred_anomaly, s=hit_size, c=_COLOR_HIT, linewidths=0.15)
     _scatter_mask(
@@ -291,20 +324,66 @@ def _reference_coordinates(
     return lat_ref, lon_ref
 
 
+def _map_output_paths(base: Path) -> Tuple[Path, Path]:
+    """Пути для двух карт: изначальный трек и разметка модели."""
+    suffix = base.suffix or ".png"
+    stem = base.stem if base.suffix else base.name
+    return (
+        base.parent / f"{stem}_ground_truth{suffix}",
+        base.parent / f"{stem}_model{suffix}",
+    )
+
+
+def _present_figure(figure: plt.Figure) -> None:
+    """Показывает фигуру в ноутбуке без преждевременного закрытия (inline backend)."""
+    try:
+        from IPython.display import display
+        from IPython import get_ipython
+
+        if get_ipython() is not None:
+            display(figure)
+            plt.close(figure)
+            return
+    except Exception:
+        pass
+    plt.show()
+
+
+def _finish_map_figure(
+    figure: plt.Figure,
+    suptitle: str,
+    caption: str,
+    output_path: Optional[Path],
+    interactive: bool,
+) -> None:
+    figure.suptitle(suptitle, fontsize=14)
+    figure.text(0.5, 0.01, caption, ha="center", fontsize=8, color="#4b5563")
+    figure.subplots_adjust(left=0.08, right=0.98, top=0.90, bottom=0.08)
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        figure.savefig(output_path, dpi=160)
+        plt.close(figure)
+        print(f"Карта тестового трека: {output_path.resolve()}")
+    elif interactive:
+        _present_figure(figure)
+
+
 def plot_sample_track(
     prediction: TrackSeries,
     ground_truth: TrackSeries,
     output_path: Optional[Union[str, Path]] = None,
     title: Optional[str] = None,
-    figsize: Tuple[float, float] = (13.8, 7.2),
+    figsize: Tuple[float, float] = (11.0, 8.5),
     annotate: Optional[bool] = None,
-) -> Optional[Path]:
-    """Рисует prediction и ground truth.
+    bbox: Optional[Sequence[float]] = None,
+    use_basemap: bool = True,
+) -> Optional[Tuple[Path, Path]]:
+    """Рисует prediction и ground truth двумя картами подряд.
 
-    Без ``output_path`` открывает интерактивное окно. С путём сохраняет PNG по указанному адресу.
-    ``title`` заменяет общий заголовок рисунка.
-    ``figsize`` — размер фигуры в дюймах. ``annotate`` включает номера точек;
-    если не задан, подписи ставятся только на коротких рядах.
+    Сначала изначальный трек, затем разметка модели (отдельные фигуры, не рядом).
+    Без ``output_path`` показывает обе карты последовательно в ноутбуке.
+    С ``output_path`` сохраняет два PNG: ``*_ground_truth*`` и ``*_model*`` рядом с базовым именем.
+    ``use_basemap`` — если True, подложка из тайлов OpenStreetMap (нужен интернет).
     """
     time, lon, lat, labels = ground_truth
     _, _, _, predicted = prediction
@@ -313,33 +392,50 @@ def plot_sample_track(
     lat = np.asarray(lat, dtype=np.float64)
     labels = np.asarray(labels, dtype=np.float64)
     predicted = np.asarray(predicted, dtype=np.float64)
-    limits = _padded_limits(lon, lat)
-    basemap = _load_basemap(limits[0], limits[2], limits[1], limits[3])
+    limits = _limits_from_bbox(bbox) if bbox is not None else _padded_limits(lon, lat)
+    basemap = _load_basemap(limits[0], limits[2], limits[1], limits[3]) if use_basemap else None
     reference_lat, reference_lon = _reference_coordinates(time, lat, lon, labels)
-    figure, axes = plt.subplots(1, 2, figsize=figsize)
-    _draw_truth_map(axes[0], lon, lat, labels, reference_lon, reference_lat, basemap, limits)
-    _draw_prediction_map(axes[1], lon, lat, labels, predicted, basemap, limits)
     if annotate is None:
         annotate = labels.size <= 80
-    if annotate:
-        indices = _story_indices(labels, predicted)
-        _annotate_indices(axes[0], lon, lat, indices)
-        _annotate_indices(axes[1], lon, lat, indices)
-    figure.suptitle(title or "Тестовый трек у Владивостока: точки 8–12 уходят в петлю", fontsize=14)
-    caption = "Подложка: OpenStreetMap."
+    indices = _story_indices(labels, predicted) if annotate else []
+    base_title = title or "Тестовый трек у Владивостока: точки 8–12 уходят в петлю"
+    caption = _MAP_CAPTION if use_basemap else "Без подложки карты."
     if annotate:
         caption += " Числа — индексы ряда."
-    figure.text(0.5, 0.01, caption, ha="center", fontsize=8, color="#4b5563")
-    figure.subplots_adjust(left=0.05, right=0.98, top=0.90, bottom=0.08, wspace=0.14)
-    if output_path is None:
-        plt.show()
+
+    base_output = Path(output_path) if output_path is not None else None
+    truth_path, model_path = (
+        _map_output_paths(base_output) if base_output is not None else (None, None)
+    )
+    interactive = base_output is None
+
+    figure_truth, axis_truth = plt.subplots(1, 1, figsize=figsize)
+    _draw_truth_map(axis_truth, lon, lat, labels, reference_lon, reference_lat, basemap, limits)
+    if annotate:
+        _annotate_indices(axis_truth, lon, lat, indices)
+    _finish_map_figure(
+        figure_truth,
+        f"{base_title} — изначальный трек",
+        caption,
+        truth_path,
+        interactive,
+    )
+
+    figure_model, axis_model = plt.subplots(1, 1, figsize=figsize)
+    _draw_prediction_map(axis_model, lon, lat, labels, predicted, basemap, limits)
+    if annotate:
+        _annotate_indices(axis_model, lon, lat, indices)
+    _finish_map_figure(
+        figure_model,
+        f"{base_title} — разметка модели",
+        caption,
+        model_path,
+        interactive,
+    )
+
+    if base_output is None:
         return None
-    output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(output, dpi=160)
-    plt.close(figure)
-    print(f"Карта тестового трека: {output.resolve()}")
-    return output
+    return truth_path, model_path
 
 
 def _standalone_demo_track() -> Tuple[TrackSeries, TrackSeries]:
@@ -363,7 +459,7 @@ def _standalone_demo_track() -> Tuple[TrackSeries, TrackSeries]:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Отрисовка тестового трека на карте OpenStreetMap.")
+    parser = argparse.ArgumentParser(description="Отрисовка тестового трека на фоне карты.")
     parser.add_argument(
         "-o",
         "--output",
@@ -371,6 +467,25 @@ if __name__ == "__main__":
         default=None,
         help="Путь к PNG. Если не задан, картинка показывается интерактивно.",
     )
+    parser.add_argument(
+        "--bbox",
+        nargs=4,
+        type=float,
+        metavar=("SOUTH", "WEST", "NORTH", "EAST"),
+        default=None,
+        help="Окно карты: юг запад север восток (градусы).",
+    )
+    parser.add_argument(
+        "--no-basemap",
+        action="store_true",
+        help="Не загружать тайлы OSM, только трек на осях.",
+    )
     args = parser.parse_args()
     demo_prediction, demo_ground_truth = _standalone_demo_track()
-    plot_sample_track(demo_prediction, demo_ground_truth, output_path=args.output)
+    plot_sample_track(
+        demo_prediction,
+        demo_ground_truth,
+        output_path=args.output,
+        bbox=args.bbox,
+        use_basemap=not args.no_basemap,
+    )
