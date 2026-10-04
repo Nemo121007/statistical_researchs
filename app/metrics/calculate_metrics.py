@@ -248,6 +248,19 @@ def _reference_track(
     return lat_ref, lon_ref, valid
 
 
+def _reference_route_length_m(
+    time_s: np.ndarray, lat: np.ndarray, lon: np.ndarray, gt_anomaly: np.ndarray
+) -> float:
+    """Длина эталона: штатные точки и интерполяция только внутренних разрывов.
+
+    Аномальный участок у края ряда не имеет пары штатных соседей. Его сырые
+    координаты в длину эталона не входят: иначе петля на краю считалась бы
+    частью маршрута, и детектор, который её убрал, получал бы штраф.
+    """
+    lat_ref, lon_ref, valid = _reference_track(time_s, lat, lon, gt_anomaly)
+    return _path_length_m(lat_ref[valid], lon_ref[valid])
+
+
 def _false_negative_distances(
     time_s: np.ndarray,
     gt_lon: np.ndarray,
@@ -670,12 +683,44 @@ class CalculateMetrics:
         return float(np.max(distances))
 
     @staticmethod
+    def path_length_m(lat: np.ndarray, lon: np.ndarray) -> float:
+        """Длина ломаной по последовательным точкам, в метрах.
+
+        Меньше двух точек дают длину 0. Это та же формула, что у L_pred.
+        """
+        latitude = np.asarray(lat, dtype=np.float64)
+        longitude = np.asarray(lon, dtype=np.float64)
+        if latitude.ndim != 1 or longitude.ndim != 1 or latitude.shape != longitude.shape:
+            raise ValueError("Широта и долгота ломаной должны быть одномерными массивами одной длины.")
+        if latitude.size:
+            _validate_coordinates(latitude, longitude)
+        return _path_length_m(latitude, longitude)
+
+    @staticmethod
+    def reference_route_length(ground_truth: Series) -> float:
+        """Длина эталонного маршрута ground truth, в метрах.
+
+        В длину входят штатные точки и линейная интерполяция аномальных
+        промежутков, у которых есть штатные соседи с обеих сторон. Краевые
+        аномальные участки без такой пары не входят. Если штатных точек нет,
+        длина равна 0.
+        """
+        time, lon, lat, label = _unpack(ground_truth)
+        if lat.size:
+            _validate_coordinates(lat, lon)
+        time_s = _to_seconds(time)
+        if time_s.size >= 2 and np.any(np.diff(time_s) <= 0.0):
+            raise ValueError("Время ground truth должно строго возрастать.")
+        return _reference_route_length_m(time_s, lat, lon, np.equal(label, 0.0))
+
+    @staticmethod
     def calculate_distance_loss(prediction: Series, ground_truth: Series) -> Tuple[float, float]:
         """Считает абсолютный и относительный distance loss длины траектории.
 
         L_ref — длина эталона: штатные точки ground truth и линейная интерполяция
-        аномальных промежутков. L_pred — длина ломаной по точкам, которые
-        классификатор оставил штатными (ŷ!=0), в координатах prediction.
+        внутренних аномальных промежутков. Краевой аномальный участок без пары
+        штатных соседей в L_ref не входит. L_pred — длина ломаной по точкам,
+        которые классификатор оставил штатными (ŷ!=0), в координатах prediction.
         DL = |L_pred - L_ref|, DLR = DL / L_ref.
 
         Args:
@@ -686,8 +731,7 @@ class CalculateMetrics:
             DL в метрах и безразмерный DLR. При нулевой эталонной длине DLR равен nan.
         """
         time, pred_lon, pred_lat, pred_anomaly, gt_lon, gt_lat, gt_anomaly = _prepare(prediction, ground_truth)
-        lat_ref, lon_ref, _ = _reference_track(time, gt_lat, gt_lon, gt_anomaly)
-        reference_length = _path_length_m(lat_ref, lon_ref)
+        reference_length = _reference_route_length_m(time, gt_lat, gt_lon, gt_anomaly)
         accepted = ~pred_anomaly
         predicted_length = _path_length_m(pred_lat[accepted], pred_lon[accepted])
         loss = abs(predicted_length - reference_length)

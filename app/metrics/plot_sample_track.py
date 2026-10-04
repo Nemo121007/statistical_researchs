@@ -161,6 +161,18 @@ def _track_line(axis, lon: np.ndarray, lat: np.ndarray, **style) -> None:
     axis.plot(lon, lat, **style)
 
 
+def _broken_polyline(lon: np.ndarray, lat: np.ndarray, omit: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Координаты с NaN в omit: matplotlib не рисует отрезки через разрыв."""
+    lon_plot = np.asarray(lon, dtype=np.float64).copy()
+    lat_plot = np.asarray(lat, dtype=np.float64).copy()
+    omit = np.asarray(omit, dtype=bool)
+    if omit.shape != lon_plot.shape:
+        raise ValueError("omit должен совпадать по длине с lon/lat")
+    lon_plot[omit] = np.nan
+    lat_plot[omit] = np.nan
+    return lon_plot, lat_plot
+
+
 def _to_seconds(time: np.ndarray) -> np.ndarray:
     """Приводит время к float-секундам. Для datetime64 единица — секунды."""
     values = np.asarray(time)
@@ -233,18 +245,31 @@ def _scatter_mask(axis, lon: np.ndarray, lat: np.ndarray, mask: np.ndarray, **st
         axis.scatter(lon[mask], lat[mask], **style)
 
 
-def _draw_truth_map(axis, lon, lat, labels, reference_lon, reference_lat, basemap, limits) -> None:
+def _draw_truth_map(
+    axis,
+    lon,
+    lat,
+    labels,
+    reference_lon,
+    reference_lat,
+    reference_valid,
+    basemap,
+    limits,
+) -> None:
     """Левая панель: записанный трек, аномальная петля и эталонная интерполяция."""
     _draw_basemap(axis, basemap, limits)
     normal_size, hit_size, _, _ = _marker_sizes(lon.size)
     line_width = 0.7 if lon.size > 8_000 else 2.9
     halo_width = 2.0 if lon.size > 8_000 else 5.6
-    _track_line(axis, lon, lat, color="white", linewidth=halo_width, zorder=2, solid_capstyle="round")
-    _track_line(axis, lon, lat, color=_COLOR_TRACK, linewidth=line_width, zorder=3, solid_capstyle="round")
+    anomaly = np.equal(labels, 0.0)
+    track_lon, track_lat = _broken_polyline(lon, lat, anomaly)
+    ref_lon, ref_lat = _broken_polyline(reference_lon, reference_lat, ~reference_valid)
+    _track_line(axis, track_lon, track_lat, color="white", linewidth=halo_width, zorder=2, solid_capstyle="round")
+    _track_line(axis, track_lon, track_lat, color=_COLOR_TRACK, linewidth=line_width, zorder=3, solid_capstyle="round")
     _track_line(
         axis,
-        reference_lon,
-        reference_lat,
+        ref_lon,
+        ref_lat,
         color=_COLOR_REFERENCE,
         linestyle=(0, (7, 4)),
         linewidth=max(1.2, line_width),
@@ -301,13 +326,17 @@ def _draw_prediction_map(axis, lon, lat, labels, predicted, basemap, limits) -> 
 
 def _reference_coordinates(
     time: np.ndarray, lat: np.ndarray, lon: np.ndarray, labels: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Линейный эталон через аномальный разрыв между соседними штатными точками."""
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Эталон: штатные точки и интерполяция только во внутренних аномальных разрывах.
+
+    На краях ряда аномалии в линию эталона не входят (как в CalculateMetrics).
+    """
     lat_ref = lat.copy()
     lon_ref = lon.copy()
+    valid = np.ones(lat.shape, dtype=bool)
     anomaly = np.equal(labels, 0.0)
     if not np.any(anomaly):
-        return lat_ref, lon_ref
+        return lat_ref, lon_ref, valid
     padded = np.concatenate(([False], anomaly, [False]))
     changes = np.diff(padded.astype(np.int8))
     starts = np.flatnonzero(changes == 1)
@@ -315,13 +344,14 @@ def _reference_coordinates(
     last = lat.size - 1
     for start, end in zip(starts.tolist(), ends.tolist()):
         if start == 0 or end == last:
+            valid[start : end + 1] = False
             continue
         alpha = (time[start : end + 1] - time[start - 1]) / (time[end + 1] - time[start - 1])
         lon_left = lon[start - 1]
         delta_lon = (lon[end + 1] - lon_left + 180.0) % 360.0 - 180.0
         lat_ref[start : end + 1] = lat[start - 1] + alpha * (lat[end + 1] - lat[start - 1])
         lon_ref[start : end + 1] = (lon_left + alpha * delta_lon + 180.0) % 360.0 - 180.0
-    return lat_ref, lon_ref
+    return lat_ref, lon_ref, valid
 
 
 def _map_output_paths(base: Path) -> Tuple[Path, Path]:
@@ -394,7 +424,7 @@ def plot_sample_track(
     predicted = np.asarray(predicted, dtype=np.float64)
     limits = _limits_from_bbox(bbox) if bbox is not None else _padded_limits(lon, lat)
     basemap = _load_basemap(limits[0], limits[2], limits[1], limits[3]) if use_basemap else None
-    reference_lat, reference_lon = _reference_coordinates(time, lat, lon, labels)
+    reference_lat, reference_lon, reference_valid = _reference_coordinates(time, lat, lon, labels)
     if annotate is None:
         annotate = labels.size <= 80
     indices = _story_indices(labels, predicted) if annotate else []
@@ -410,7 +440,17 @@ def plot_sample_track(
     interactive = base_output is None
 
     figure_truth, axis_truth = plt.subplots(1, 1, figsize=figsize)
-    _draw_truth_map(axis_truth, lon, lat, labels, reference_lon, reference_lat, basemap, limits)
+    _draw_truth_map(
+        axis_truth,
+        lon,
+        lat,
+        labels,
+        reference_lon,
+        reference_lat,
+        reference_valid,
+        basemap,
+        limits,
+    )
     if annotate:
         _annotate_indices(axis_truth, lon, lat, indices)
     _finish_map_figure(
