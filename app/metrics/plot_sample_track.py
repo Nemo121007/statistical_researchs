@@ -184,7 +184,7 @@ def _to_seconds(time: np.ndarray) -> np.ndarray:
 
 
 def _marker_sizes(count: int) -> Tuple[int, int, int, int]:
-    """Размеры точек: штатная, попадание, пропуск, ложная тревога."""
+    """Размеры маркеров: TP (штатная), TN (аномалия), FN (пропуск), FP (ложная тревога)."""
     if count > 8_000:
         return 8, 14, 18, 16
     if count > 400:
@@ -293,7 +293,14 @@ def _draw_truth_map(
 
 
 def _draw_prediction_map(axis, lon, lat, labels, predicted, basemap, limits) -> None:
-    """Правая панель: какие точки модель оставила штатными и где ошиблась."""
+    """Правая панель: разметка модели и типы ошибок.
+
+    Положительный класс на карте — штатная точка (метка != 0):
+    TP — штатная, модель назвала штатной;
+    TN — аномалия, модель назвала аномалией;
+    FP — штатная, модель назвала аномалией (ложная тревога);
+    FN — аномалия, модель назвала штатной (пропуск).
+    """
     _draw_basemap(axis, basemap, limits)
     gt_anomaly = np.equal(labels, 0.0)
     pred_anomaly = np.equal(predicted, 0.0)
@@ -301,21 +308,25 @@ def _draw_prediction_map(axis, lon, lat, labels, predicted, basemap, limits) -> 
     normal_size, hit_size, miss_size, false_size = _marker_sizes(lon.size)
     line_width = 0.5 if lon.size > 8_000 else 1.4
     _track_line(axis, lon[accepted], lat[accepted], color=_COLOR_ACCEPTED, linewidth=line_width, zorder=2)
-    _scatter_mask(axis, lon, lat, ~gt_anomaly & accepted, s=normal_size, c=_COLOR_NORMAL, zorder=3, linewidths=0.15)
-    _scatter_mask(axis, lon, lat, gt_anomaly & pred_anomaly, s=hit_size, c=_COLOR_HIT, linewidths=0.15)
+    tp_mask = ~gt_anomaly & accepted
+    tn_mask = gt_anomaly & pred_anomaly
+    fn_mask = gt_anomaly & accepted
+    fp_mask = ~gt_anomaly & pred_anomaly
+    _scatter_mask(axis, lon, lat, tp_mask, s=normal_size, c=_COLOR_NORMAL, zorder=3, linewidths=0.15)
+    _scatter_mask(axis, lon, lat, tn_mask, s=hit_size, c=_COLOR_HIT, zorder=4, linewidths=0.15)
     _scatter_mask(
-        axis, lon, lat, gt_anomaly & accepted, s=miss_size, c=_COLOR_ANOMALY, marker="X", zorder=5, linewidths=0.6
+        axis, lon, lat, fn_mask, s=miss_size, c=_COLOR_ANOMALY, marker="X", zorder=5, linewidths=0.6
     )
     _scatter_mask(
-        axis, lon, lat, ~gt_anomaly & pred_anomaly, s=false_size, c=_COLOR_FALSE, marker="^", zorder=5, linewidths=0.15
+        axis, lon, lat, fp_mask, s=false_size, c=_COLOR_FALSE, marker="^", zorder=5, linewidths=0.15
     )
     axis.set_title("Разметка модели")
     axis.legend(
         handles=[
-            Line2D([0], [0], color=_COLOR_NORMAL, marker="o", linestyle="None", label="Верно, штатная, TP"),
-            Line2D([0], [0], color=_COLOR_HIT, marker="o", linestyle="None", label="Обнаружена аномалия, TN"),
-            Line2D([0], [0], color=_COLOR_ANOMALY, marker="X", linestyle="None", label="Пропуск, FN"),
-            Line2D([0], [0], color=_COLOR_FALSE, marker="^", linestyle="None", label="Ложная тревога, FP"),
+            Line2D([0], [0], color=_COLOR_NORMAL, marker="o", linestyle="None", label="TP — штатная верно"),
+            Line2D([0], [0], color=_COLOR_HIT, marker="o", linestyle="None", label="TN — аномалия верно"),
+            Line2D([0], [0], color=_COLOR_ANOMALY, marker="X", linestyle="None", label="FN — пропуск аномалии"),
+            Line2D([0], [0], color=_COLOR_FALSE, marker="^", linestyle="None", label="FP — ложная тревога"),
             Line2D([0], [0], color=_COLOR_ACCEPTED, label="Маршрут, принятый моделью"),
         ],
         loc="lower right",
