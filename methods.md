@@ -14,9 +14,9 @@ $$ a_i=\mathbf1[y_i=0]. $$
 
 Ускорение далее обозначается \(a_i^{\mathrm{acc}}\), чтобы не смешивать его с \(a_i\).
 
-Метод \(M\) сопоставляет точке anomaly score \(s^{(M)}\): большее значение — более аномальная точка. Формула \(s_i=M(X_{\le i})\) относится к online/causal-вариантам: ARIMA, фильтр Калмана, particle filter, TCN и HMM. Остальные методы видят окно или весь оцениваемый набор.
+Метод \(M\) сопоставляет точке anomaly score \(s^{(M)}\): большее значение — более аномальная точка. Формула \(s_i=M(X_{\le i})\) относится к online/causal-вариантам: ARIMA, фильтр Калмана, particle filter, GP-EKF, TCN и HMM. Остальные методы видят окно или весь оцениваемый набор.
 
-На точках \(y_i>0\) учатся ARIMA, GP, LSTM-автоэнкодер, TCN, DONUT, Anomaly Transformer, STGVAD и One-Class SVM. HMM учится на обоих классах. Isolation Forest строится по всей обучающей выборке. DBSCAN и LOF считают плотность по тому ряду, который размечают. Калман, particle filter, Hampel, RPCA и MPCT параметры модели по отдельной нормальной выборке не оценивают.
+На точках \(y_i>0\) учатся ARIMA, GP, GP-EKF, LSTM-автоэнкодер, TCN, DONUT, Anomaly Transformer, STGVAD и One-Class SVM. HMM учится на обоих классах. Isolation Forest строится по всей обучающей выборке. DBSCAN и LOF считают плотность по тому ряду, который размечают. Калман, particle filter, Hampel, RPCA и MPCT параметры модели по отдельной нормальной выборке не оценивают.
 
 Порог и перевод в разметку. Здесь \(\hat a_i=1\) означает аномалию, тогда как в исходной схеме классов аномалия — это метка \(0\):
 
@@ -38,7 +38,7 @@ $$ \Delta x_i=R\cos\bar\varphi_i\,\Delta\lambda_i, \qquad \Delta y_i=R\,\Delta\v
 
 $$ \mathrm{shape}_i=\frac{\sum_{k=i-w}^{i-1}d_{\mathrm{geo}}(p_k,p_{k+1})}{\max\bigl(d_{\mathrm{geo}}(p_{i-w},p_i),1\bigr)}. $$
 
-Робастная шкала по точкам \(y>0\) обучения: вычесть медиану, разделить на межквартильный размах. Для HMM вместо размаха берётся \(1{.}4826\,\mathrm{MAD}\), результат обрезается в \([-25,25]\). Локальная проекция от медианы \((\varphi_0,\lambda_0)\) этих точек нужна только Калману и фильтру частиц:
+Робастная шкала по точкам \(y>0\) обучения: вычесть медиану, разделить на межквартильный размах. Для HMM вместо размаха берётся \(1{.}4826\,\mathrm{MAD}\), результат обрезается в \([-25,25]\). Локальная проекция от медианы \((\varphi_0,\lambda_0)\) этих точек нужна Калману, фильтру частиц и GP-EKF:
 
 $$ E_i=R\cos\varphi_0\,(\lambda_i-\lambda_0), \qquad N_i=R(\varphi_i-\varphi_0). $$
 
@@ -150,6 +150,56 @@ $$ s_i=\frac{(\Delta x_i-\mu_x(t_i))^2}{\sigma_x^2(t_i)}+\frac{(\Delta y_i-\mu_y
 
 - Smith M., Reece S., Roberts S., Psorakis I., Rezek I. Maritime Abnormality Detection Using Gaussian Processes // Knowledge and Information Systems. 2014. Vol. 38, No. 3. P. 717–741. DOI: [10.1007/s10115-013-0685-z](https://doi.org/10.1007/s10115-013-0685-z).
 - Penacho Riveiros A., Bastianello N., Barreau M. Model-free Anomaly Detection for Dynamical Systems with Gaussian Processes. 2026. 6 p. [PDF](docs/methods/Model-free%20Anomaly%20Detection%20for.pdf).
+
+# GP-EKF, GP-BayesFilters #
+
+Ko и Fox не детектируют аномалии: они подставляют гауссовские процессы вместо параметрических моделей прогноза и наблюдения внутрь фильтра Байеса. В статье три фильтра: GP-PF, GP-EKF и GP-UKF. В опыт входит GP-EKF. Его отличие от обычного EKF — якобиан среднего GP, а не якобиан заранее заданной функции.
+
+В статье нет входа управления, отдельного от состояния. У трека управления нет, поэтому аргумент процесса — скорость и шаг времени. Наблюдение ГНСС линейно по положению, второй GP для него не учится: в статье GP-наблюдение нужно, когда отображение состояния в измерение неизвестно.
+
+## Общая математическая постановка ##
+
+Фильтр Байеса:
+
+$$ p(x_k\mid z_{1:k},u_{1:k-1}) \propto p(z_k\mid x_k)\int p(x_k\mid x_{k-1},u_{k-1})\,p(x_{k-1}\mid z_{1:k-1})\,dx_{k-1}. $$
+
+Прогноз GP — гауссовское распределение перехода. Наблюдение в статье тоже GP. Для скалярного выхода и квадратично-экспоненциального ядра
+
+$$ k(x,x')=\sigma_f^2\exp\Bigl(-\frac12(x-x')W(x-x')^T\Bigr)+\sigma_n^2\delta, $$
+
+$$ \mathrm{GP}_\mu(x_*,D)=k_*^T K^{-1}y, \qquad \mathrm{GP}_\sigma(x_*,D)=k(x_*,x_*)-k_*^T K^{-1}k_*. $$
+
+Якобиан среднего по входу, нужный EKF:
+
+$$ \frac{\partial \mathrm{GP}_\mu(x_*,D)}{\partial x_*} = \frac{\partial k_*}{\partial x_*}^{\!T} K^{-1}y, \qquad \frac{\partial k(x_*,x)}{\partial x_*[i]}=-W_{ii}(x_*[i]-x[i])\,\sigma_f^2\exp\Bigl(-\frac12(x_*-x)W(x_*-x)^T\Bigr). $$
+
+Шаг GP-EKF. Процесс учит приращение состояния, поэтому линеаризация содержит единичную матрицу:
+
+$$ \bar\mu_k=\mu_{k-1}+\mathrm{GP}_\mu([\mu_{k-1},u_{k-1}],D_p), \qquad Q_k=\mathrm{GP}_\sigma([\mu_{k-1},u_{k-1}],D_p), $$
+
+$$ G_k=I+\frac{\partial\mathrm{GP}_\mu}{\partial x_{k-1}}, \qquad \bar\Sigma_k=G_k\Sigma_{k-1}G_k^T+Q_k. $$
+
+Дальше обычное обновление EKF: прогноз измерения, \(R_k\), якобиан наблюдения \(H_k\), коэффициент Калмана, новое среднее и ковариация. Выходы по координатам — независимые GP, поэтому \(Q_k\) диагональна.
+
+Усиленный GP (enhanced GP) учит не само приращение, а остаток после параметрической модели \(f\):
+
+$$ \Delta\tilde x_k=x_{k+1}-x_k-f(x_k,u_k). $$
+
+## Частный случай для \(P\) и \(G\) ##
+
+Состояние в \((E,N)\), как у фильтра Калмана: положение и скорость. Параметрическая модель — постоянная скорость, шаг в ней ограничен \(\Delta t=\min(\Delta t_i,45\,\mathrm{с})\):
+
+$$ \mathbf x_i=\begin{pmatrix}E\\ N\\ v^E\\ v^N\end{pmatrix}_i, \qquad f(\mathbf x,\Delta t)=\begin{pmatrix}v^E\Delta t\\ v^N\Delta t\\ 0\\ 0\end{pmatrix}. $$
+
+Вход GP — \((v^E,v^N,\Delta t)\), не координаты на карте: другой район сам по себе не выглядит как отсутствие обучающих данных. Четыре независимых GP учатся на переходах \(y_i>0\to y_{i+1}>0\). Опорных переходов не больше 160, они берутся равномерно. Длина корреляции и шум ядра выбираются сеткой по логарифму маргинального правдоподобия. Наблюдение
+
+$$ \mathbf z_i=H\mathbf x_i+\mathbf v_i, \qquad H=\begin{pmatrix}1&0&0&0\\ 0&1&0&0\end{pmatrix}, \qquad R=\sigma_z^2 I_2, \quad \sigma_z=40\,\mathrm{м}. $$
+
+$$ s_i=\mathbf r_i^T S_i^{-1}\mathbf r_i, \qquad \mathbf r_i=\mathbf z_i-H\bar{\mathbf x}_i, \qquad S_i=H\bar P_i H^T+R, \qquad \hat a_i=\mathbf1[s_i>\tau]. $$
+
+При согласованной гауссовской модели \(s_i\sim\chi^2_2\). Квантиль \(\chi^2\) в порог не входит. Если \(\Delta t_i>180\,\mathrm{с}\), инновация шага сохраняется, затем состояние заменяется измерением, а скорость обнуляется.
+
+**Источник:** Ko J., Fox D. GP-BayesFilters: Bayesian Filtering Using Gaussian Process Prediction and Observation Models // Autonomous Robots. 2009. Vol. 27, No. 1. P. 75–90. DOI: [10.1007/s10514-009-9119-x](https://doi.org/10.1007/s10514-009-9119-x). [PDF](docs/GP-BayesFilters_Bayesian_Filtering_Using_Gaussian_.pdf).
 
 # Hidden Markov Model #
 
