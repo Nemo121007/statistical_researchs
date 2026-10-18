@@ -1,0 +1,191 @@
+\documentclass[a4paper,12pt]{report}
+
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{lmodern}
+\DeclareFontFamily{T2A}{lmr}{}
+\DeclareFontShape{T2A}{lmr}{m}{n}{<->ssub*cmr/m/n}{}
+\DeclareFontShape{T2A}{lmr}{bx}{n}{<->ssub*cmr/bx/n}{}
+\DeclareFontShape{T2A}{lmr}{b}{n}{<->ssub*cmr/bx/n}{}
+\DeclareFontShape{T2A}{lmr}{m}{it}{<->ssub*cmr/m/it}{}
+\DeclareFontShape{T2A}{lmr}{m}{sl}{<->ssub*cmr/m/sl}{}
+\usepackage{graphicx}
+\usepackage{setspace}
+\usepackage{fancyvrb}
+\usepackage{appendix}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{hyphenat}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{array}
+\makeatletter
+\renewcommand\@biblabel[1]{#1.}
+\makeatother
+
+\newcommand{\myrule}[1]{\rule{#1}{0.4pt}}
+\newcommand{\sign}[2][~]{{\small\myrule{#2}\\[-0.7em]\makebox[#2]{\it #1}}}
+
+% Поля
+\usepackage[top=20mm, left=30mm, right=15mm, bottom=20mm, includefoot]{geometry}
+\usepackage{indentfirst}
+\footskip 20pt
+
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\setcounter{secnumdepth}{4}
+
+\bibliographystyle{gost780s}  %% стилевой файл для оформления по ГОСТу
+
+\lstset{
+	basicstyle=\footnotesize,           % the size of the fonts that are used for the code
+	numbers=left,                   % where to put the line-numbers
+	numberstyle=\tiny\color{gray},
+	captionpos=b,                   % sets the caption-position to bottom
+	breaklines=true,                % sets automatic line breaking
+}
+
+
+\begin{document}
+	
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	%%%                         %%%
+	%%% Начало титульного листа %%%
+	
+	\thispagestyle{empty}
+	{ \large
+		%%% Название работы %%%
+		\begin{center}
+			\renewcommand{\baselinestretch}{1.2}
+			\Large
+			{\Large Анализ зашумленных и частично наблюдаемых данных судовых навигационных систем}
+		\end{center}
+		\medskip%
+		
+		\vspace{3\bigskipamount}%
+		\begin{flushright}
+			\begin{minipage}{0.5\textwidth}
+				\begin{flushleft}
+					Гашков С.П.
+				\end{flushleft}
+			\end{minipage}
+		\end{flushright}
+		
+		\vfill%
+	}
+	
+	%%% Конец титульного листа  %%%
+	%%%                         %%%
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	
+	% Размер шрифта (14пт)
+	\large
+	
+	% Межстрочный интервал (полуторный)
+	\onehalfspacing
+	
+	\clearpage
+	\renewcommand{\thesection}{\arabic{section}}
+	\graphicspath{{../pict/}}
+	
+	\section{Постановка задачи}
+	Дан временной ряд 
+	$\left\{\left(\mathit{time}_i,\, \mathit{lat}_i,\, \mathit{lon}_i,\, \mathit{sat}_i \right) \right\}_{i=0}^{n}$, где:\\
+	$time_i: \; time_{i+1} - time_i = \Delta t = const \qquad \forall i \in [0..n-1]$ - дата время, в которое произошло очередное измерение (по умолчанию $\Delta t  = 10$ сек.),\\
+	$lat_i: \; lat_i \in [-90.0 \; \ldots \; 90.0]$ - широта, полученная датчиком GPS в момент времени $time_i$,\\
+	$lon_i: \; lon_i \in [-180.0 \; \ldots \; 180.0]$ - долгота, полученная датчиком GPS в момент времени $time_i$,\\
+	$sat_i: \; sat_i \in \{0 \; \ldots \; N\}$ - количество спутников, видимое датчиком GPS в момент времени $time_i$,\\
+	являющийся записью геопространственной телементрии судна.
+	
+	Основная задача: составить временной ряд меток $\left\{y_i\right\} \}_{i=0}^{n}$, где:\\
+	$y_i =
+	\begin{cases}
+		\mathrm{move},   & \text{$i$ --- точка со штатным движением судна}\\
+		\mathrm{anomaly}, & \text{$i$ --- точка с аномальным движением судна (помехами GPS)}
+	\end{cases}$, 
+	является результатом классификации точек на штатные и аномальные.
+	
+	В целях исследования, обработки, обучения и тестирования моделей заказчиком предоставлены 3 временных ряда (реальных телеметрий судов), соотвествующих 3 разным судам (разных типов, конфигураций и районами движения) за период 3 месяцев следующего вида:
+	$\left\{\left(\mathit{time}_i,\, \mathit{lat}_i,\, \mathit{lon}_i,\, \mathit{sat}_i,\, y_i\right) \right\}_{i=0}^{n}$, где $y_i$ является эталонной ручной разметкой, произведённой специалистом предметной области со стороны заказчика. 
+	
+	\section{Список метрик}
+	Основная цель заказчика - максимизация достоверности статистики движения судна (в частности, пройденного пути) и положения судна в конкретный момент времени. В связи с этим, а также в связи с тем, что данная задача является задей классификации, в работе используется следующий набор метрик (в порядке приоритетности):
+	\begin{enumerate}
+		\item Геопространственные метрики,
+		\item Временные метрики,
+		\item Общие метрики классификации.
+	\end{enumerate}
+	
+	\subsection*{Ограничение}
+	В рамках поставленной задачи истинные точки траектории движения судна известны только для точек $y_i \ne anomaly$. В точках $y_i = anomaly$ истинные точки траектории неизвестны. Ввиду этого вводится предположение о том, что в аномальных точках происходит равномерное, прямолинейное движение по прямой, соединяющей две ближайших не-аномальные точки. Предполагается, что такой способ заполнения данных, примененый и к предсказаниям модели, и к эталанным данным, обеспечит корректный рассчёт геопространственных метрик. В результате введения данного ограничения формируется следующий порядок рассчёта геопространственных метрик:
+	\begin{enumerate}
+		\item Извлекаются все записи, для которых $y_i \ne anomaly$ из эталонных данных. \\
+		$\left\{\left(\mathit{time}_i,\, \mathit{lat}_i,\, \mathit{lon}_i,\, y_i\right) \right\}_{i=0, y_i = anomaly}^{n}$ заполняются путём линейной интерполяции от $\left\{\left(\mathit{time}_j,\, \mathit{lat}_j,\, \mathit{lon}_j,\, y_j\right) \right\}$ до $\left\{\left(\mathit{time}_k,\, \mathit{lat}_k,\, \mathit{lon}_k,\, y_k\right) \right\}$, где:\\
+			$j: j < i, \; j=max, \; y_j \ne anomaly$ - последняя неаномальная точка до $i$,\\
+			$k: k > i, \; k=min, \; y_k \ne anomaly$ - первая неаномальная точка после $i$,\\
+			а сами координаты $lat_i$, $lon_i$ распределяются пропорционально $\frac{i}{k-j}$.
+		\item Анологично получаются точки для трека, обработанного моделью (в качестве $y_i$ используются предсказания модели).
+		\item Рассчёт геопространсвенных метрик
+	\end{enumerate}
+	
+	\subsection*{Геопространственные метрики}
+	Для рассчёта геопространственных метрик используется разница между эталонными координатами и координатами, полученными из предсказаний модели:\\
+	$d_i$ = $\sqrt{(lat_{truth} - lat_{prediction})^2 + (lon_{truth} - lon_{prediction})^2}$, где:\\
+	$lat_{truth}$, $lon_{truth}$ - координаты, полученные из эталонных данных,
+	$lat_{prediction}$, $lon_{prediction}$ - координаты, полученные из предсказания модели.
+	Сами геопространственные метрики представлены следующим набором метрик:
+	\begin{enumerate}
+		\item $RMSE$\\
+		Cреднеквадратичное отклонение (в метрах) между соответствующими точками траекторий.
+		$RMSE=\sqrt{\frac{1}{n+1}\sum_{i=0}^{n} d_i^2}$, где:\\
+		$d_i$ - отклонение между $i$-ыми координатами траекторий;
+		\item $Max(d_i)$\\
+		Максимальное отклонение (в метрах) между точками траекторий.
+		\item Distance loss\\
+		Разница суммарных длин траекторий.
+		$DL=|L_{\mathrm{truth}}-L_{\mathrm{prediction}}|,  \qquad L(T)=\sum d_{\mathrm{geo}}(p_i,p_{i+1})$, где:\\
+		$p_i$ - $i$-я точка траектории с координатами $(lat_i, lon_i)$;\\
+		$d_{\mathrm{geo}}(p_i,p_{i+1})$ - геодезическое расстояние между соседними точками (в метрах);
+	\end{enumerate}
+	
+	\subsection*{Временные метрики}
+	\begin{enumerate}
+		\item Detection Delay\\
+		Задержка от начала истинного эпизода аномалии до первой детекции внутри него.\\
+		Для непрерывного интервала $S_k=\{i : y_i = \mathrm{anomaly}\}$:\\
+		$\mathrm{Delay}_k=time_k^{\mathrm{detect}}-time_k^{\mathrm{start}}$, где:\\
+		$time_k^{\mathrm{start}}=\min_{i\in S_k} time_i\}$ - момент начала аномалии,\\
+		$time_k^{\mathrm{detect}}=\min\{time_i : i\in S_k,\ \hat{y}_i = \mathrm{anomaly}\}$ - момент обнаружения аномалии.\\
+		Если внутри $S_k$ аномалия не предсказана ($\hat{y}_i \neq \mathrm{anomaly}$ на всём участке), событие считается не обнаруженным, и $\mathrm{Delay}_k$ принимает значение длинны аномального эпизода:\\
+		$\mathrm{Delay}_k = time_k^{\mathrm{end}}-time_k^{\mathrm{start}}$,\\
+		где $time_k^{\mathrm{end}}=\max_{i\in S_k} time_i$.\\
+		По всему набору задержек считаются медиана, среднее, 95-й перцентиль и максимальное значение.
+	\end{enumerate}
+	
+	\subsection*{Общие метрики классификации}
+	Классические метрики задачи классификации. Положительный класс - $\mathrm{anomaly}$.\\
+	$TP=\sum_{i=0}^{n}\mathbf{1}[y_i=\mathrm{anomaly}\land\hat{y}_i=\mathrm{anomaly}]$, \\
+	$FP=\sum_{i=0}^{n}\mathbf{1}[y_i=\mathrm{move}\land\hat{y}_i=\mathrm{anomaly}]$, \\
+	$FN=\sum_{i=0}^{n}\mathbf{1}[y_i=\mathrm{anomaly}\land\hat{y}_i=\mathrm{move}]$, где:\\
+	$y_i$ - эталонная метка, \\
+	$\hat{y}_i$ - предсказание модели.
+	\begin{enumerate}
+		\item Precision\\
+		Доля предсказанных аномалий, которые действительно являются аномалиями.\\
+		$\mathrm{Precision}=\dfrac{TP}{TP+FP}$.
+		\item Recalll\\
+		Доля истинных аномалий, которые модель обнаружила.\\
+		$\mathrm{Recall}=\dfrac{TP}{TP+FN}$.
+		\item $F_1$\\
+		Гармоническое среднее точности и полноты.\\
+		$F_1=\dfrac{2TP}{2TP+FP+FN}$.
+	\end{enumerate}
+	
+	
+	\section{Предварительная обработка данных}
+
+\end{document}
