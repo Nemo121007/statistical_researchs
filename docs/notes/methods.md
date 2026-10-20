@@ -104,7 +104,7 @@ $$
 s_i=d_{\mathrm{geo}}(\mathbf z_i,\hat{\mathbf z}_i), \qquad \hat a_i=\mathbf1[s_i>\tau].
 $$
 
-**Источник:** Qin Yu, Lyu Jibin, Lirui Jiang. An Improved ARIMA-Based Traffic Anomaly Detection Algorithm for Wireless Sensor Networks // International Journal of Distributed Sensor Networks. 2016. Vol. 2016. Article ID 9653230. 9 p. DOI: [10.1155/2016/9653230](https://doi.org/10.1155/2016/9653230). [PDF](methods/An Improved ARIMA-Based Traffic Anomaly Detection Algorithm for Wireless Sensor Networks.pdf).
+**Источник:** Qin Yu, Lyu Jibin, Lirui Jiang. An Improved ARIMA-Based Traffic Anomaly Detection Algorithm for Wireless Sensor Networks // International Journal of Distributed Sensor Networks. 2016. Vol. 2016. Article ID 9653230. 9 p. DOI: [10.1155/2016/9653230](https://doi.org/10.1155/2016/9653230). [PDF](../papers/methods/An%20Improved%20ARIMA-Based%20Traffic%20Anomaly%20Detection%20Algorithm%20for%20Wireless%20Sensor%20Networks.pdf).
 
 # Калмановский фильтр с моделью постоянной скорости
 
@@ -178,7 +178,7 @@ $$
 
 Та же модель постоянной скорости и тот же предел \Delta t\le 45\mathrm{с}, но с K гипотезами. \hat a_i=\mathbf1[s_i>\tau]. Если \Delta t_i>180\mathrm{с} или s_i>40, частицы после записи score переинициализируются в точке измерения.
 
-**Источник:** Arulampalam M. S., Maskell S., Gordon N., Clapp T. A Tutorial on Particle Filters for Online Nonlinear/Non-Gaussian Bayesian Tracking // IEEE Transactions on Signal Processing. 2002. Vol. 50, No. 2. P. 174–188. DOI: [10.1109/78.978374](https://doi.org/10.1109/78.978374). [PDF](methods/A Tutorial on Particle Filters for Online.pdf).
+**Источник:** Arulampalam M. S., Maskell S., Gordon N., Clapp T. A Tutorial on Particle Filters for Online Nonlinear/Non-Gaussian Bayesian Tracking // IEEE Transactions on Signal Processing. 2002. Vol. 50, No. 2. P. 174–188. DOI: [10.1109/78.978374](https://doi.org/10.1109/78.978374). [PDF](../papers/methods/A%20Tutorial%20on%20Particle%20Filters%20for%20Online.pdf).
 
 # Gaussian Process Regression
 
@@ -209,7 +209,7 @@ $$
 **Источники:**
 
 - Smith M., Reece S., Roberts S., Psorakis I., Rezek I. Maritime Abnormality Detection Using Gaussian Processes // Knowledge and Information Systems. 2014. Vol. 38, No. 3. P. 717–741. DOI: [10.1007/s10115-013-0685-z](https://doi.org/10.1007/s10115-013-0685-z).
-- Penacho Riveiros A., Bastianello N., Barreau M. Model-free Anomaly Detection for Dynamical Systems with Gaussian Processes. 2026. 6 p. [PDF](methods/Model-free Anomaly Detection for.pdf).
+- Penacho Riveiros A., Bastianello N., Barreau M. Model-free Anomaly Detection for Dynamical Systems with Gaussian Processes. 2026. 6 p. [PDF](../papers/methods/Model-free%20Anomaly%20Detection%20for.pdf).
 
 
 
@@ -480,7 +480,7 @@ $$
 \mathbf f_i=\bigl(\Delta x_i,\Delta y_i,v_i,a_i^{\mathrm{acc}},\Delta\psi_i,\log\max(\mathrm{shape}_i,1)\bigr), \qquad s_i=-f(\mathrm{robust}(\mathbf f_i)), \qquad \hat a_i=\mathbf1[s_i>0].
 $$
 
-**Источник:** Schölkopf B., Platt J. C., Shawe-Taylor J., Smola A. J., Williamson R. C. Estimating the Support of a High-Dimensional Distribution // Neural Computation. 2001. Vol. 13, No. 7. P. 1443–1471. DOI: [10.1162/089976601750264965](https://doi.org/10.1162/089976601750264965). В `docs/methods/` лежит технический отчёт Microsoft Research MSR-TR-99-87 (27 November 1999; revised 18 September 2000): [PDF](docs/methods/Estimating%20the%20Support%20of%20a%20High-Dimensional%20Distribution.pdf).
+**Источник:** Schölkopf B., Platt J. C., Shawe-Taylor J., Smola A. J., Williamson R. C. Estimating the Support of a High-Dimensional Distribution // Neural Computation. 2001. Vol. 13, No. 7. P. 1443–1471. DOI: [10.1162/089976601750264965](https://doi.org/10.1162/089976601750264965). В `../papers/methods` лежит технический отчёт Microsoft Research MSR-TR-99-87 (27 November 1999; revised 18 September 2000): [PDF](docs/methods/Estimating%20the%20Support%20of%20a%20High-Dimensional%20Distribution.pdf).
 
 # Robust PCA / Principal Component Pursuit
 
@@ -504,7 +504,7 @@ $$
 s_i=\max_{W:\, i\in W} \|S_W(i)\|, \qquad \hat a_i=\mathbf1[s_i>\tau].
 $$
 
-**Источник:** Candès E. J., Li X., Ma Y., Wright J. Robust Principal Component Analysis? // Journal of the ACM. 2011. Vol. 58, No. 3. Article 11. P. 1–37. DOI: [10.1145/1970392.1970395](https://doi.org/10.1145/1970392.1970395). В `docs/methods/` лежит препринт arXiv:0912.3599v1 (18 December 2009): [PDF](docs/methods/Robust%20Principal%20Component%20Analysis.pdf).
+**Источник:** Candès E. J., Li X., Ma Y., Wright J. Robust Principal Component Analysis? // Journal of the ACM. 2011. Vol. 58, No. 3. Article 11. P. 1–37. DOI: [10.1145/1970392.1970395](https://doi.org/10.1145/1970392.1970395). В `../papers/methods` лежит препринт arXiv:0912.3599v1 (18 December 2009): [PDF](docs/methods/Robust%20Principal%20Component%20Analysis.pdf).
 
 # LSTM Autoencoder / EncDec-AD
 
