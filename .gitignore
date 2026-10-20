@@ -17,3 +17,5 @@ data/raw/5.csv
 /valid_interval.geojson
 *csv
 1.md
+
+*__pycache__*
