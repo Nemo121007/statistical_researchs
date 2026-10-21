@@ -9,23 +9,25 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from app.evaluation.series import TrajectorySeries
-from app.geo.haversine import great_circle_distances_m, segment_distances_m
+from app.geo.local_enu import LocalEnuConverter
 from app.viz import plot_track_maps
 
 
-def _path_length_m(lat: np.ndarray, lon: np.ndarray) -> float:
-    """
-    Вычисляет длину пути в метрах по координатам (lat, lon).
-    Args:
-        lat: массив широт.
-        lon: массив долгот.
-
-    Returns:
-        float: длина пути в метрах.
-    """
-    if lat.size < 2:
+def _path_length_xy(x_m: np.ndarray, y_m: np.ndarray) -> float:
+    """Длина ломаной в локальной ENU (метры)."""
+    if x_m.size < 2:
         return 0.0
-    return float(np.sum(segment_distances_m(lat, lon)))
+    return float(np.sum(np.hypot(np.diff(x_m), np.diff(y_m))))
+
+
+def _filled_to_local_xy(
+    lat: np.ndarray,
+    lon: np.ndarray,
+    origin_lat: float,
+    origin_lon: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    converter = LocalEnuConverter(origin_lat, origin_lon)
+    return converter.to_local_xy(lat, lon)
 
 
 class GeospatialMetrics:
@@ -78,7 +80,7 @@ class GeospatialMetrics:
     @staticmethod
     def pointwise_deviations_m(prediction: TrajectorySeries, ground_truth: TrajectorySeries) -> np.ndarray:
         """
-        Геодезическое расстояние между заполненными траекториями в каждой точке.
+        Расстояние $d_i$ в локальной ENU (м) между заполненными траекториями в каждой точке.
         Args:
             prediction: траектория с предсказаниями модели.
             ground_truth: эталонная траектория.
@@ -87,7 +89,11 @@ class GeospatialMetrics:
             np.ndarray: массив геодезических расстояний между точками.
         """
         gt_lat, gt_lon, pred_lat, pred_lon = GeospatialMetrics.filled_trajectories(prediction, ground_truth)
-        return great_circle_distances_m(gt_lat, gt_lon, pred_lat, pred_lon)
+        origin_lat = float(gt_lat[0])
+        origin_lon = float(gt_lon[0])
+        gt_x, gt_y = _filled_to_local_xy(gt_lat, gt_lon, origin_lat, origin_lon)
+        pred_x, pred_y = _filled_to_local_xy(pred_lat, pred_lon, origin_lat, origin_lon)
+        return np.hypot(pred_x - gt_x, pred_y - gt_y)
 
     @staticmethod
     def rmse_m(deviations: np.ndarray) -> float:
@@ -109,8 +115,12 @@ class GeospatialMetrics:
             float: значение distance loss.
         """
         gt_lat, gt_lon, pred_lat, pred_lon = GeospatialMetrics.filled_trajectories(prediction, ground_truth)
-        length_truth = _path_length_m(gt_lat, gt_lon)
-        length_prediction = _path_length_m(pred_lat, pred_lon)
+        origin_lat = float(gt_lat[0])
+        origin_lon = float(gt_lon[0])
+        gt_x, gt_y = _filled_to_local_xy(gt_lat, gt_lon, origin_lat, origin_lon)
+        pred_x, pred_y = _filled_to_local_xy(pred_lat, pred_lon, origin_lat, origin_lon)
+        length_truth = _path_length_xy(gt_x, gt_y)
+        length_prediction = _path_length_xy(pred_x, pred_y)
         loss = abs(length_prediction - length_truth)
         return loss
 
@@ -128,7 +138,10 @@ class GeospatialMetrics:
         lat_f, lon_f = GeospatialMetrics.__fill_anomaly_coordinates(
             time_s, ground_truth.lat, ground_truth.lon, ground_truth.anomaly_mask
         )
-        return _path_length_m(lat_f, lon_f)
+        origin_lat = float(lat_f[0])
+        origin_lon = float(lon_f[0])
+        x_m, y_m = _filled_to_local_xy(lat_f, lon_f, origin_lat, origin_lon)
+        return _path_length_xy(x_m, y_m)
 
     @staticmethod
     def prediction_path_length_m(prediction: TrajectorySeries) -> float:
@@ -144,7 +157,10 @@ class GeospatialMetrics:
         lat_f, lon_f = GeospatialMetrics.__fill_anomaly_coordinates(
             time_s, prediction.lat, prediction.lon, prediction.anomaly_mask
         )
-        return _path_length_m(lat_f, lon_f)
+        origin_lat = float(lat_f[0])
+        origin_lon = float(lon_f[0])
+        x_m, y_m = _filled_to_local_xy(lat_f, lon_f, origin_lat, origin_lon)
+        return _path_length_xy(x_m, y_m)
 
     @staticmethod
     def __fill_anomaly_coordinates(
