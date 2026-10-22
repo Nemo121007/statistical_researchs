@@ -83,25 +83,23 @@ $$ t_k^{\mathrm{start}}=\min_{i\in S_k}t_i, \qquad t_k^{\mathrm{detect}}=\min\{t
 
 $$ \mathrm{Delay}_k=t_k^{\mathrm{detect}}-t_k^{\mathrm{start}}. $$
 
-Если внутри $S_k$ аномалия не предсказана ($\hat y_i\neq 0$ на всём участке), событие undetected. Нулевой задержкой оно не заменяется. По обнаруженным событиям считаются медиана, среднее и 95-й перцентиль. Дополнительно: число истинных событий $m$, число обнаруженных и число пропущенных. Если обнаруженных событий нет, три агрегата задержки не определяются.
+Если внутри $S_k$ аномалия не предсказана ($\hat y_i\neq 0$ на всём участке), событие undetected; положим $\mathrm{Delay}_k=t_k^{\mathrm{end}}-t_k^{\mathrm{start}}$, где $t_k^{\mathrm{end}}=\max_{i\in S_k}t_i$. Нулевой задержкой пропуск не заменяется.
+
+Среднее, медиана, 95-й перцентиль и максимум считаются по всем эпизодам с $\mathrm{Delay}_k>0$: и по опозданиям (детекция есть, но не в $t_k^{\mathrm{start}}$), и по undetected (штраф — длина $S_k$). Эпизоды с детекцией в первой точке ($\mathrm{Delay}_k=0$) в эти агрегаты не входят. Дополнительно: $N_{\mathrm{on\,time}}$ — число эпизодов с $\mathrm{Delay}_k=0$ при детекции; $N_{\mathrm{late\,or\,missed}}$ — число эпизодов с опозданием или без детекции. Если нет ни одного эпизода с $\mathrm{Delay}_k>0$ (только своевременные детекции или нет истинных эпизодов), агрегаты задержки не определяются.
 
 **Источники**:
 1. Lavin A., Ahmad S. *Evaluating Real-Time Anomaly Detection Algorithms – The Numenta Anomaly Benchmark* // 2015 IEEE 14th International Conference on Machine Learning and Applications (ICMLA). 2015. P. 38–44. DOI: [10.1109/ICMLA.2015.141](https://doi.org/10.1109/ICMLA.2015.141).
 2. Scharwächter E., Müller E. *Statistical Evaluation of Anomaly Detectors for Sequences* // Proceedings of the 6th ACM SIGKDD International Workshop on Mining and Learning from Time Series (KDD MiLeTS 2020). 2020. arXiv: [2008.05788](https://arxiv.org/abs/2008.05788). DOI: [10.48550/arXiv.2008.05788](https://doi.org/10.48550/arXiv.2008.05788). 
 
-# Geodesic Distance RMSE #
+# RMSE (заполненные траектории) #
 
-Корень из среднего квадрата геодезического отклонения пропущенных аномалий от хорды штатного хода. Координаты берутся из $G$; $\hat y$ задаёт только маску.
+После линейного заполнения координат в аномальных точках (см. Distance Loss) для каждого индекса $i$ считается отклонение $d_i$ между заполненными траекториями $G$ и $P$ в локальной ENU (метры). Как и у Detection Delay, в агрегат входят не все точки: нули в сумму не попадают.
 
-Ближайшие штатные точки слева и справа, $y_l>0$, $y_r>0$. Для $t_i$ внутри разрыва $\alpha_i=(t_i-t_l)/(t_r-t_l)$, опорная точка $(\varphi_i^*,\lambda_i^*)$ — интерполяция выше,
+$$ I=\{i : d_i > 0\}, \qquad RMSE=\sqrt{\frac{1}{|I|}\sum_{i\in I} d_i^2}. $$
 
-$$ d_i=d_{\mathrm{geo}}\bigl((\mathrm{lat}_i,\mathrm{lon}_i),(\varphi_i^*,\lambda_i^*)\bigr). $$
+Точки с $d_i = 0$ (совпадение заполненных координат) в $RMSE$ **не входят**, чтобы не занижать ошибку там, где траектории совпадают. Если $I=\varnothing$, $RMSE$ не определяется. $d_i$ и $RMSE$ — в **метрах**.
 
-$$ S_{FN}=\{i:y_i=0\land\hat y_i\neq 0\}, \qquad V=\{i:\text{у разрыва есть оба штатных соседа}\}. $$
-
-$$ RMSE_d=\sqrt{\frac{1}{|S_{FN}\cap V|}\sum_{i\in S_{FN}\cap V}d_i^2}. $$
-
-При пустом $S_{FN}$ значение равно $0$. Если $S_{FN}\neq\emptyset$, но $S_{FN}\cap V=\emptyset$, $RMSE_d$ не определяется. Точки краевого разрыва в сумму не входят.  $d_i$ и $RMSE_d$ — в **метрах** ($R=6371\cdot 10^3\,\mathrm{м}$ в реализации).
+*Справочно (литература, в `GeospatialMetrics` не считается):* корень из среднего квадрата отклонения пропущенной аномалии от хорды штатного хода по $S_{FN}=\{i:y_i=0\land\hat y_i\neq 0\}$ и $V=\{i:\text{есть оба штатных соседа}\}$.
 
 **Источники**:
 1. Sturm J., Engelhard N., Endres F., Burgard W., Cremers D. *A Benchmark for the Evaluation of RGB-D SLAM Systems* // 2012 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS). 2012. P. 573–580. DOI: [10.1109/IROS.2012.6385773](https://doi.org/10.1109/IROS.2012.6385773).
@@ -109,11 +107,11 @@ $$ RMSE_d=\sqrt{\frac{1}{|S_{FN}\cap V|}\sum_{i\in S_{FN}\cap V}d_i^2}. $$
 
 # Hausdorff Distance #
 
-По тем же пропускам и тем же $d_i$, что у $RMSE_d$:
+По пропускам $S_{FN}\cap V$ (см. справку в разделе RMSE):
 
 $$ H_{FN}=\max_{i\in S_{FN}\cap V}d_i. $$
 
-При пустом $S_{FN}$ значение равно $0$. Если $S_{FN}\cap V=\emptyset$ при непустом $S_{FN}$, $H_{FN}$ не определяется. Значение в **метрах**, те же $d_i$, что у $RMSE_d$.
+При пустом $S_{FN}$ значение равно $0$. Если $S_{FN}\cap V=\emptyset$ при непустом $S_{FN}$, $H_{FN}$ не определяется. В `GeospatialMetrics` вместо Hausdorff считается $\max_i d_i$ по всем индексам заполненных траекторий (в **метрах**).
 
 Это направленный максимум ошибки пропуска. Симметричное расстояние множеств $H(A,B)=\max\{h(A,B),h(B,A)\}$, $h(A,B)=\max_{a\in A}\min_{b\in B}d(a,b)$, здесь не считается: оно не использует ни время, ни маску пропуска.
 

@@ -97,11 +97,15 @@ class GeospatialMetrics:
 
     @staticmethod
     def rmse_m(deviations: np.ndarray) -> float:
-        """RMSE по точкам с ненулевым отклонением $d_i > 0$ (см. Отчёт.tex)."""
-        positive = deviations[deviations > 0.0]
-        if positive.size == 0:
+        """RMSE по точкам с ненулевым отклонением.
+
+        В сумму и знаменатель входят только $d_i > 0$ (точки с $d_i = 0$ не
+        занижают ошибку). Если таких точек нет, метрика не определена (`nan`).
+        """
+        nonzero = deviations[deviations > 0.0]
+        if nonzero.size == 0:
             return float("nan")
-        return float(np.sqrt(np.mean(np.square(positive))))
+        return float(np.sqrt(np.mean(np.square(nonzero))))
 
     @staticmethod
     def distance_loss(prediction: TrajectorySeries, ground_truth: TrajectorySeries) -> float:

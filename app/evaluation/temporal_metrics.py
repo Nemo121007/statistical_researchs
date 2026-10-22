@@ -62,9 +62,10 @@ class TemporalMetrics:
     def compute(prediction: TrajectorySeries, ground_truth: TrajectorySeries) -> Dict[str, float]:
         """Считает задержки по эпизодам и агрегаты.
 
-        В среднее, медиану, p95 и max входят только эпизоды с **положительной** задержкой
-        (детекция не в первой точке эпизода). Нулевая задержка (детекция с первой точки)
-        учитывается в ``delay_n_on_time``; опоздания и пропуски — в ``delay_n_late_or_missed``.
+        В среднее, медиану, p95 и max входят опоздания (delay > 0 при детекции внутри
+        эпизода) и пропущенные эпизоды (штраф = длина эпизода). Детекция с первой точки
+        (delay = 0) в агрегаты не входит и учитывается в ``delay_n_on_time``; опоздания
+        и пропуски — в ``delay_n_late_or_missed``.
 
         Returns:
             delay_mean, delay_median, delay_p95, delay_max, delay_n_on_time, delay_n_late_or_missed.
@@ -72,18 +73,19 @@ class TemporalMetrics:
         events = TemporalMetrics.per_event_delays(prediction, ground_truth)
         n_on_time = 0
         n_late_or_missed = 0
-        positive_delays: list[float] = []
+        aggregate_delays: list[float] = []
         for delay, _, _, detected in events:
             if not detected:
                 n_late_or_missed += 1
+                aggregate_delays.append(delay)
                 continue
             if delay > 0.0:
                 n_late_or_missed += 1
-                positive_delays.append(delay)
+                aggregate_delays.append(delay)
             else:
                 n_on_time += 1
 
-        if not positive_delays:
+        if not aggregate_delays:
             aggregates = {
                 "delay_mean": float("nan"),
                 "delay_median": float("nan"),
@@ -91,7 +93,7 @@ class TemporalMetrics:
                 "delay_max": float("nan"),
             }
         else:
-            values = np.asarray(positive_delays, dtype=np.float64)
+            values = np.asarray(aggregate_delays, dtype=np.float64)
             aggregates = {
                 "delay_mean": float(np.mean(values)),
                 "delay_median": float(np.median(values)),
@@ -126,7 +128,7 @@ class TemporalMetrics:
                 delay = float(time_s[detect_at] - time_s[start])
                 result.append((delay, start, end, True))
             else:
-                # Штрафная длительность эпизода — для разбора по эпизодам; в агрегаты delay не входит.
+                # Штраф = длина эпизода; входит в агрегаты delay вместе с опозданиями.
                 delay = float(time_s[end] - time_s[start])
                 result.append((delay, start, end, False))
         return result
