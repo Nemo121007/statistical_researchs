@@ -46,6 +46,7 @@ if __name__ == "__main__":
         ("precision", "Precision"),
         ("recall", "Recall"),
         ("f1", "F1"),
+        ("mcc", "MCC"),
         ("delay_mean", "Delay mean, с"),
         ("delay_median", "Delay median, с"),
         ("delay_p95", "Delay p95, с"),
@@ -58,7 +59,7 @@ if __name__ == "__main__":
     def _format_metric_value(key: str, value: float) -> str:
         if not math.isfinite(value):
             return "—"
-        if key in {"precision", "recall", "f1"} or key.startswith("delay_"):
+        if key in {"precision", "recall", "f1", "mcc"} or key.startswith("delay_"):
             return f"{value:.4f}"
         return f"{value:.2f}"
 
