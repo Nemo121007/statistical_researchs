@@ -275,11 +275,32 @@
 
 	\section{Описание и сравнение моделей}
 	\subsection{Предварительная обработка}
+	При сравнении моделей исходные записи телеметрии приводятся к единому ряду наблюдений и двум сценариям разбиения на обучающую и тестовую выборки. После загрузки CSV индексы сырых строк $j=0,\ldots,M-1$; поля $t_j$ (\texttt{time}), $\varphi_j$ (\texttt{lat}), $\lambda_j$ (\texttt{lon}), $y_j$ (\texttt{status}). В эксперименте используются только $y_j\in\{\mathrm{move},\mathrm{anomaly}\}$. Для метрик классификации положительный класс --- $\mathrm{anomaly}$; числовая метка \texttt{label}: $\mathrm{anomaly}\rightarrow 0$, $\mathrm{move}\rightarrow 1$.
 
+	Порядок действий:
+	\begin{enumerate}
+		\item \textbf{Отбор столбцов.} Остаются $(t_i,\varphi_i,\lambda_i,y_i)$.
+		\item \textbf{Валидные координаты.}
+		$$\mathcal{J}_1=\{i:\ \varphi_i,\lambda_i\ \text{конечны},\ -90\le\varphi_i\le 90,\ -180\le\lambda_i\le 180,\ (\varphi_i,\lambda_i)\neq(0,0)\}.$$
+		\item \textbf{Бинарная задача.}
+		$$\mathcal{J}_2=\{i\in\mathcal{J}_1:\ y_i\in\{\mathrm{move},\mathrm{anomaly}\}\}.$$
+		Точки с иными метками (в том числе $\mathrm{stand}$) отбрасываются.
+		\item \textbf{Упорядочивание.} На $\mathcal{J}_2$ --- сортировка по возрастанию $t_i$; индекс $i=0$ --- первая валидная точка ряда.
+		\item \textbf{Локальная ENU (м).} Опорная точка --- первая валидная точка: $(\varphi_0,\lambda_0)=(\varphi_{0},\lambda_{0})$. Преобразование WGS-84 $\rightarrow$ ECEF $\rightarrow$ ENU:
+		$$(x_i,n_i)\equiv(E_i,N_i)=\mathrm{ENU}(\varphi_i,\lambda_i\mid\varphi_0,\lambda_0).$$
+		Широта и долгота сохраняются; в таблицу добавляются $x_i$, $n_i$ (метка класса --- $y_i$).
+		\item \textbf{Обрезка по крайним $\mathrm{move}$.}
+		$$\mathcal{I}_{\mathrm{move}}=\{i:\ y_i=\mathrm{move}\},\quad i_{\min}=\min\mathcal{I}_{\mathrm{move}},\quad i_{\max}=\max\mathcal{I}_{\mathrm{move}}.$$
+		Рабочий ряд --- срез $i_{\min}\le i\le i_{\max}$ (первая и последняя точки --- $\mathrm{move}$); координаты $(x_i,n_i)$ не пересчитываются.
+		\item \textbf{Разбиение train / test.} Для доли обучения $\rho\in(0,1)$ задается $k_0=\lfloor\rho N\rfloor$ и граница
+		$$k=\min\{i\ge k_0:\ y_i=\mathrm{move}\}.$$
+		Обучение: индексы $[0,k)$, тест: $[k,N)$. Если $y_{k_0}=\mathrm{move}$, то $k=k_0$. Граница не ставится внутрь фрагмента без соседнего $\mathrm{move}$.
+	\end{enumerate}
 
+	В блокноте формируются два сценария с $\rho_1=0{,}4$ и $\rho_2=0{,}2$; для каждого выводятся размеры выборок и доли $\mathrm{anomaly}$ и $\mathrm{move}$ на обучении и тесте. Разбиение по суточным интервалам с отдельной опорой ENU на каждом интервале в данном эксперименте не применяется.
 
 	\subsection{Описание метрик}
-	В сравнительных экспериментах с детекторами аномалий траектории используются, в частности, коэффициент корреляции Мэттьюса (MCC) и distance loss.
+	В сравнительных экспериментах с моделями используются, в частности, коэффициент корреляции Мэттьюса (MCC) и distance loss.
 
 	\subsubsection*{Коэффициент корреляции Мэттьюса (MCC)}
 	\textbf{Коэффициент корреляции Мэттьюса} (Matthews correlation coefficient, MCC) --- коэффициент корреляции Пирсона между двумя бинарными векторами: эталонной разметкой и предсказанием (каждая компонента кодируется как 0 или 1). Эквивалентно он выражается через четыре числа таблицы сопряженности $TP$, $FP$, $FN$, $TN$ и принимает значения от $-1$ до $1$.
@@ -291,7 +312,7 @@
 	\begin{equation*}
 		\mathrm{MCC}=\frac{TP\cdot TN - FP\cdot FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}},
 	\end{equation*}
-	где:
+	где:\\
 	$TP=\sum_i \mathbf{1}[a_i=1\land \hat a_i=1]$,\\
 	$FP=\sum_i \mathbf{1}[a_i=0\land \hat a_i=1]$,\\
 	$FN=\sum_i \mathbf{1}[a_i=1\land \hat a_i=0]$,\\
