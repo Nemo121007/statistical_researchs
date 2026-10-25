@@ -52,7 +52,7 @@ $$
 \mathrm{shape}_i=\frac{\sum_{k=i-w}^{i-1}d_{\mathrm{geo}}(p_k,p_{k+1})}{\max\bigl(d_{\mathrm{geo}}(p_{i-w},p_i),1\bigr)}.
 $$
 
-Робастная шкала по точкам y>0 обучения: вычесть медиану, разделить на межквартильный размах. Для HMM вместо размаха берётся 1{.}4826\mathrm{MAD}, результат обрезается в [-25,25]. Локальная проекция от медианы (\varphi_0,\lambda_0) этих точек нужна Калману, фильтру частиц и GP-EKF:
+Робастная шкала по точкам y>0 обучения: вычесть медиану, разделить на межквартильный размах (в том числе признаки HMM (v,a,\Delta\psi)). Локальная проекция от медианы (\varphi_0,\lambda_0) этих точек нужна Калману, фильтру частиц и GP-EKF:
 
 $$
 E_i=R\cos\varphi_0\,(\lambda_i-\lambda_0), \qquad N_i=R(\varphi_i-\varphi_0).
@@ -292,8 +292,10 @@ Toloue и Jahan строят пять HMM с дискретными наблюд
 Point-wise адаптация той же идеи, а не формула статьи: гауссовские HMM и отношение локальных predictive likelihood нормального и аномальных режимов.
 
 $$
-o_i=\mathrm{scale}_{\mathrm{MAD}}(v_i,a_i^{\mathrm{acc}},\Delta\psi_i).
+o_i=\mathrm{scale}_{\mathrm{robust}}(v_i,a_i^{\mathrm{acc}},\Delta\psi_i),
 $$
+
+где \mathrm{scale}_{\mathrm{robust}} — медиана и IQR по move на train (как для LOF, IF и др.).
 
 
 
