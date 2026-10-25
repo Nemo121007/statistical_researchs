@@ -20,9 +20,11 @@ $$
 
 Ускорение далее обозначается a_i^{\mathrm{acc}}, чтобы не смешивать его с a_i.
 
-Метод M сопоставляет точке anomaly score s^{(M)}: большее значение — более аномальная точка. Формула s_i=M(X_{\le i}) относится к online/causal-вариантам: ARIMA, фильтр Калмана, particle filter, GP-EKF, TCN и HMM. Остальные методы видят окно или весь оцениваемый набор.
+Метод M сопоставляет точке anomaly score s^{(M)}: большее значение — более аномальная точка. Формула s_i=M(X_{\le i}) относится к online/causal-вариантам: AR(p), ARIMA, фильтр Калмана, GP-EKF, TCN и HMM. Остальные методы видят окно или весь оцениваемый набор (batch).
 
-На точках y_i>0 учатся ARIMA, GP, GP-EKF, LSTM-автоэнкодер, TCN, DONUT, Anomaly Transformer, STGVAD и One-Class SVM. HMM учится на обоих классах. Isolation Forest строится по всей обучающей выборке. DBSCAN и LOF считают плотность по тому ряду, который размечают. Калман, particle filter, Hampel, RPCA и MPCT параметры модели по отдельной нормальной выборке не оценивают.
+На точках y_i>0 учатся GP, GP-EKF (опоры перехода), LSTM-автоэнкодер, TCN, DONUT, STGVAD и One-Class SVM. AR(p) и ARIMA оцениваются по всему обучающему ряду (включая участки с y_i=0). HMM учится на обоих классах по непрерывным отрезкам. Isolation Forest строится по всей обучающей выборке. DBSCAN и LOF считают плотность по тому ряду, который размечают. Калман, Hampel, RPCA и MPCT не обучают параметры модели по отдельной выборке move; MPCT подбирает только v_+ и \tau_{\mathrm{shape}} на train.
+
+Блокнот `notebooks/example_model.ipynb` реализует перечисленные ниже методы, кроме bootstrap particle filter и Anomaly Transformer (разделы сохранены для справки).
 
 Порог и перевод в разметку. Здесь \hat a_i=1 означает аномалию, тогда как в исходной схеме классов аномалия — это метка 0:
 
@@ -60,6 +62,27 @@ $$
 
 
 
+# AR(p) на уровнях ENU
+
+Авторегрессия порядка p с линейным трендом на уровнях координат; детектор — причинный одношаговый прогноз и ошибка на шаге.
+
+## Частный случай для P и G
+
+Две независимые модели AR(p) с trend на уровнях (в блокноте — ARIMA(p,0,0), trend='t'):
+
+$$
+x_i = c_x + \sum_{k=1}^{p}\phi_{x,k}\, x_{i-k} + \varepsilon_i, \qquad
+n_i = c_n + \sum_{k=1}^{p}\phi_{n,k}\, n_{i-k} + \eta_i.
+$$
+
+Параметры оцениваются по всему train. Прогнозы \hat x_i, \hat n_i строятся причинно:
+
+$$
+s_i = \sqrt{(x_i-\hat x_i)^2+(n_i-\hat n_i)^2}, \qquad \hat a_i=\mathbf1[s_i>\tau].
+$$
+
+В эксперименте p=2 (константа AR_LAGS).
+
 # ARIMA для прогнозирования и anomaly detection
 
 Модель прогнозирует следующее значение по предыдущим и помечает точку как аномальную при большом расхождении с прогнозом.
@@ -92,16 +115,16 @@ $$
 
 ## Частный случай для P и G
 
-Две независимые модели на координатах ENU (в блокноте `example_model` — statsmodels `ARIMA(2,1,1)` на всём обучающем ряде).:
+Две независимые модели на координатах ENU (в блокноте — ARIMA(2,1,1) на всём train):
 
 $$
-\mathrm{lat}_i \sim \mathrm{ARIMA}(2,1,1), \qquad \mathrm{lon}_i \sim \mathrm{ARIMA}(2,1,1).
+x_i \sim \mathrm{ARIMA}(2,1,1), \qquad n_i \sim \mathrm{ARIMA}(2,1,1).
 $$
 
 Прогноз одношаговый и обновляется фактическим приращением. Метка на шаге прогноза не используется:
 
 $$
-s_i=d_{\mathrm{geo}}(\mathbf z_i,\hat{\mathbf z}_i), \qquad \hat a_i=\mathbf1[s_i>\tau].
+s_i=\sqrt{(x_i-\hat x_i)^2+(n_i-\hat n_i)^2}, \qquad \hat a_i=\mathbf1[s_i>\tau].
 $$
 
 **Источник:** Qin Yu, Lyu Jibin, Lirui Jiang. An Improved ARIMA-Based Traffic Anomaly Detection Algorithm for Wireless Sensor Networks // International Journal of Distributed Sensor Networks. 2016. Vol. 2016. Article ID 9653230. 9 p. DOI: [10.1155/2016/9653230](https://doi.org/10.1155/2016/9653230). [PDF](../papers/methods/An%20Improved%20ARIMA-Based%20Traffic%20Anomaly%20Detection%20Algorithm%20for%20Wireless%20Sensor%20Networks.pdf).
@@ -151,6 +174,8 @@ $$
 Если \Delta t_i>180\mathrm{с}, инновация этого шага всё равно входит в s_i, после чего состояние заменяется измерением, а скорость обнуляется.
 
 # Bootstrap Particle Filter / SIR
+
+*Не реализован в `example_model.ipynb`.*
 
 Вместо одного прогноза держится набор гипотез о движении. Аномалия — измерение, маловероятное для всех гипотез сразу. Particle filter может представлять мультимодальное распределение состояния; развилки и резкие повороты требуют соответствующей модели движения.
 
@@ -289,13 +314,13 @@ $$
 
 Toloue и Jahan строят пять HMM с дискретными наблюдениями (S,\Delta S,\mathrm{Drift},\Delta C): unexpected stop, risky speed, drift, spiral, normal. Модели обучаются Baum–Welch и сравниваются алгоритмом Forward на всей траектории.
 
-Point-wise адаптация той же идеи, а не формула статьи: гауссовские HMM и отношение локальных predictive likelihood нормального и аномальных режимов.
+Point-wise адаптация идеи морской HMM, а не формула статьи: гауссовские HMM с диагональными ковариациями и отношение причинных предсказательных лог-правдоподобий.
 
 $$
-o_i=\mathrm{scale}_{\mathrm{robust}}(v_i,a_i^{\mathrm{acc}},\Delta\psi_i),
+\tilde o_i=\frac{o_i-m}{\mathrm{IQR}}, \qquad o_i=(v_i,a_i^{\mathrm{acc}},\Delta\psi_i),
 $$
 
-где \mathrm{scale}_{\mathrm{robust}} — медиана и IQR по move на train (как для LOF, IF и др.).
+где m и \mathrm{IQR} оцениваются по точкам y_i>0 на train и фиксируются для test.
 
 
 
@@ -317,11 +342,13 @@ $$
 
 ## Частный случай
 
-Три диагональные модели: \theta_N на штатных отрезках, \theta_A на аномальных, \theta_F на аномальных отрезках с v\ge 8\mathrm{м/с}, если такие есть. Point-wise score — максимум разности предсказательных логарифмов:
+Три семейства параметров: \theta_N на непрерывных отрезках \mathrm{move}, \theta_A на отрезках \mathrm{anomaly}, \theta_F на отрезках anomaly с v_i\ge v_{\mathrm{fast}} (в эксперименте v_{\mathrm{fast}}=8\,\mathrm{м/с}, HMM_FAST_SPEED_MPS), если такие отрезки есть на train. Отрезки обрываются при большом \Delta t; в обучение входит ограниченное число самых длинных отрезков класса. EM (Baum–Welch) с фиксированным числом итераций. Score:
 
 $$
-s_i=\max_{k\in\{A,F\}} \log P(o_i\mid o_{1:i-1},\theta_k)-\log P(o_i\mid o_{1:i-1},\theta_N), \qquad \hat a_i=\mathbf1[s_i>\tau].
+s_i=\max_{k\in\{A,F\}} \log P(\tilde o_i\mid \tilde o_{1:i-1},\theta_k)-\log P(\tilde o_i\mid \tilde o_{1:i-1},\theta_N),
 $$
+
+индекс F учитывается только при обученной \theta_F; \hat a_i=\mathbf1[s_i>\tau].
 
 **Источник:** Toloue K. F., Jahan M. V. Anomalous Behavior Detection of Marine Vessels Based on Hidden Markov Model // 2018 6th Iranian Joint Congress on Fuzzy and Intelligent Systems (CFIS). IEEE, 2018. P. 10–12. [PDF](docs/methods/AnomalousBehaviorDetectionofMarineVessels.pdf).
 
@@ -558,6 +585,8 @@ $$
 
 # DONUT — VAE для anomaly detection
 
+В блокноте — адаптация к окнам относительных координат траектории (км); обучение move-окон через Pyro SVI (Trace\_ELBO), не пакет NetManAIOps для сезонных KPI.
+
 Вариационный автоэнкодер задаёт распределение окон. Окно с низкой вероятностью считается аномальным. DONUT сделан для сезонных KPI веб-приложений: modified ELBO, учёт пропусков и KDE-интерпретация реконструкции. Формулы ниже — общая VAE-постановка; перенос на окна траектории — адаптация, не алгоритм статьи.
 
 ## Общая математическая постановка
@@ -583,6 +612,8 @@ $$
 **Источник:** Xu H., Chen W., Zhao N., Li Z., Bu J., Li Z., Liu Y., Zhao Y., Pei D., Feng Y., Chen J., Wang Z., Qiao H. Unsupervised Anomaly Detection via Variational Auto-Encoder for Seasonal KPIs in Web Applications // Proceedings of The Web Conference 2018 (WWW '18). Lyon, France, 23–27 April 2018. ACM, 2018. 12 p. DOI: [10.1145/3178876.3185996](https://doi.org/10.1145/3178876.3185996). arXiv: [1802.03903](https://arxiv.org/abs/1802.03903). [PDF](docs/methods/Unsupervised%20Anomaly%20Detection%20via%20Variational%20Auto-Encoder.pdf).
 
 # Anomaly Transformer
+
+*Не реализован в `example_model.ipynb`.*
 
 Для окна последовательности модель совмещает ошибку восстановления и расхождение ассоциаций attention с prior-ассоциацией. Из-за adjacent-concentration bias аномалия часто имеет меньшую association discrepancy, поэтому в итоговом score стоит \mathrm{Softmax}(-\mathrm{AssDis}), а не само расхождение.
 
