@@ -7,6 +7,7 @@ pykalman>=0.9.7
 geojson>=3.1.0
 shapely>=2.0.0
 matplotlib>=3.10.7
+statsmodels>=0.14.0
 geopy>=2.4.0
 tqdm>=4.66.0
 black>=23.3.0

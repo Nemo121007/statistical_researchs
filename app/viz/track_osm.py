@@ -6,7 +6,7 @@ import io
 import math
 import urllib.request
 from pathlib import Path
-from typing import Any, Optional, Sequence, Tuple, Union
+from typing import Any, Literal, Optional, Sequence, Tuple, Union
 
 from app.evaluation.series import TrajectorySeries
 
@@ -20,6 +20,7 @@ from PIL import Image
 MapLimits = Tuple[float, float, float, float]
 BasemapExtent = Tuple[float, float, float, float]
 BasemapBundle = Tuple[np.ndarray, BasemapExtent]
+MapPanel = Literal["both", "ground_truth", "model"]
 
 _OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 _MAP_USER_AGENT = "statistical-researchs-viz/0.1"
@@ -32,6 +33,8 @@ _COLOR_HIT = "#1f7a4d"
 _COLOR_FALSE = "#d97706"
 _COLOR_ACCEPTED = "#1f2933"
 _TILE_MEMORY: dict[Tuple[int, int, int], np.ndarray] = {}
+_MERCATOR_LAT_LIMIT = 85.05112878
+_DEFAULT_MOVE_BBOX_MARGIN = 0.05
 
 
 def plot_track_maps(
@@ -43,10 +46,13 @@ def plot_track_maps(
     annotate: Optional[bool] = None,
     bbox: Optional[Sequence[float]] = None,
     use_basemap: bool = True,
-) -> Optional[Tuple[Path, Path]]:
-    """Рисует трек на карте OSM: ground truth и предсказание модели.
+    map_panel: MapPanel = "both",
+) -> Optional[Tuple[Optional[Path], Optional[Path]]]:
+    """Рисует трек на карте OSM: ground truth и/или предсказание модели.
 
-    Формируются две отдельные фигуры (не в одном ряду). На каждой — растровая подложка
+    По умолчанию формируются две отдельные фигуры (не в одном ряду). Параметр map_panel
+    позволяет вывести только эталон (ground_truth) или только разметку модели (model), чтобы
+    в ноутбуке не дублировать карту эталона рядом с картой модели. На каждой — растровая подложка
     из тайлов OpenStreetMap (если use_basemap и есть сеть), линия маршрута, точки
     с разными маркерами по типу (штатная / аномалия / ошибки классификации), легенда и
     при необходимости подписи с индексами точек.
@@ -59,12 +65,17 @@ def plot_track_maps(
         title: Общий заголовок; к нему добавляются суффиксы панелей.
         figsize: Размер фигуры в дюймах.
         annotate: Подписывать индексы точек. По умолчанию True, если точек не больше 80.
-        bbox: Окно карты [юг, запад, север, восток] в градусах. Иначе — авто-поля вокруг трека.
+        bbox: Окно карты [юг, запад, север, восток] в градусах. Если None — bbox по истинным
+            точкам move (label 1) с полем 5% от размаха по каждой стороне; линии обрезаются по окну.
         use_basemap: Загружать тайлы OSM; при ошибке сети рисуется только трек на сером фоне.
+        map_panel: Какие панели рисовать: both, ground_truth или model.
 
     Returns:
         Пути к сохранённым файлам (ground_truth, model) или None, если не сохраняли.
+        Несохранённая панель в кортеже — None.
     """
+    if map_panel not in ("both", "ground_truth", "model"):
+        raise ValueError("map_panel должен быть 'both', 'ground_truth' или 'model'")
     time = TrajectorySeries.time_to_seconds(ground_truth.time)
     lon = ground_truth.lon
     lat = ground_truth.lat
@@ -74,7 +85,10 @@ def plot_track_maps(
     lat = np.asarray(lat, dtype=np.float64)
     labels = np.asarray(labels, dtype=np.float64)
     predicted = np.asarray(predicted, dtype=np.float64)
-    limits = _limits_from_bbox(bbox) if bbox is not None else _padded_limits(lon, lat)
+    if bbox is None:
+        move_mask = np.equal(labels, 1.0)
+        bbox = bbox_from_move_points(lon, lat, move_mask)
+    limits = _limits_from_bbox(bbox)
     basemap = _load_basemap(limits[0], limits[2], limits[1], limits[3]) if use_basemap else None
     reference_lat, reference_lon, reference_valid = _reference_coordinates(time, lat, lon, labels)
     if annotate is None:
@@ -88,44 +102,70 @@ def plot_track_maps(
     base_output = Path(output_path) if output_path is not None else None
     truth_path, model_path = _map_output_paths(base_output) if base_output is not None else (None, None)
     interactive = base_output is None
+    draw_truth = map_panel in ("both", "ground_truth")
+    draw_model = map_panel in ("both", "model")
 
-    figure_truth, axis_truth = plt.subplots(1, 1, figsize=figsize)
-    _draw_truth_map(
-        axis_truth,
-        lon,
-        lat,
-        labels,
-        reference_lon,
-        reference_lat,
-        reference_valid,
-        basemap,
-        limits,
-    )
-    if annotate:
-        _annotate_indices(axis_truth, lon, lat, indices)
-    _finish_map_figure(
-        figure_truth,
-        f"{base_title} — изначальный трек",
-        caption,
-        truth_path,
-        interactive,
-    )
+    if draw_truth:
+        figure_truth, axis_truth = plt.subplots(1, 1, figsize=figsize)
+        _draw_truth_map(
+            axis_truth,
+            lon,
+            lat,
+            labels,
+            reference_lon,
+            reference_lat,
+            reference_valid,
+            basemap,
+            limits,
+        )
+        if annotate:
+            _annotate_indices(axis_truth, lon, lat, indices)
+        _finish_map_figure(
+            figure_truth,
+            f"{base_title} — изначальный трек",
+            caption,
+            truth_path,
+            interactive,
+        )
 
-    figure_model, axis_model = plt.subplots(1, 1, figsize=figsize)
-    _draw_prediction_map(axis_model, lon, lat, labels, predicted, basemap, limits)
-    if annotate:
-        _annotate_indices(axis_model, lon, lat, indices)
-    _finish_map_figure(
-        figure_model,
-        f"{base_title} — разметка модели",
-        caption,
-        model_path,
-        interactive,
-    )
+    if draw_model:
+        figure_model, axis_model = plt.subplots(1, 1, figsize=figsize)
+        _draw_prediction_map(axis_model, lon, lat, labels, predicted, basemap, limits)
+        if annotate:
+            _annotate_indices(axis_model, lon, lat, indices)
+        _finish_map_figure(
+            figure_model,
+            f"{base_title} — разметка модели",
+            caption,
+            model_path,
+            interactive,
+        )
 
     if base_output is None:
         return None
-    return truth_path, model_path
+    return (
+        truth_path if draw_truth else None,
+        model_path if draw_model else None,
+    )
+
+
+def _clamp_latitude_mercator(lat: float) -> float:
+    return min(max(float(lat), -_MERCATOR_LAT_LIMIT), _MERCATOR_LAT_LIMIT)
+
+
+def _clamp_map_bounds(west: float, east: float, south: float, north: float) -> MapLimits:
+    """Ограничивает окно карты допустимыми WGS-84 / Web Mercator границами."""
+    south = max(float(south), -_MERCATOR_LAT_LIMIT)
+    north = min(float(north), _MERCATOR_LAT_LIMIT)
+    west = max(float(west), -180.0)
+    east = min(float(east), 180.0)
+    if south >= north:
+        mid = (south + north) / 2.0
+        south, north = mid - 0.005, mid + 0.005
+    if west >= east:
+        mid = (west + east) / 2.0
+        west, east = mid - 0.005, mid + 0.005
+    return west, east, south, north
 
 
 def _tile_index(lon: float, lat: float, zoom: int) -> Tuple[int, int]:
@@ -142,7 +182,7 @@ def _tile_index(lon: float, lat: float, zoom: int) -> Tuple[int, int]:
     """
     scale = 2.0**zoom
     x_tile = int((lon + 180.0) / 360.0 * scale)
-    lat_rad = math.radians(lat)
+    lat_rad = math.radians(_clamp_latitude_mercator(lat))
     y_tile = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * scale)
     last = int(scale) - 1
     return min(max(x_tile, 0), last), min(max(y_tile, 0), last)
@@ -186,9 +226,19 @@ def _tile_span(west: float, south: float, east: float, north: float, zoom: int) 
         x_east: Индекс тайла по долготе для восточной границы
         y_south: Индекс тайла по широте для южной границы
     """
-    x_west, y_north = _tile_index(west, north, zoom)
-    x_east, y_south = _tile_index(east, south, zoom)
-    return x_west, y_north, x_east, y_south
+    corners = (
+        (west, north),
+        (west, south),
+        (east, north),
+        (east, south),
+    )
+    x_indices: list[int] = []
+    y_indices: list[int] = []
+    for corner_lon, corner_lat in corners:
+        x_tile, y_tile = _tile_index(corner_lon, corner_lat, zoom)
+        x_indices.append(x_tile)
+        y_indices.append(y_tile)
+    return min(x_indices), min(y_indices), max(x_indices), max(y_indices)
 
 
 def _choose_zoom(west: float, south: float, east: float, north: float, max_tiles: int = 20) -> int:
@@ -253,20 +303,70 @@ def _load_basemap(
         image: RGB-массив подложки
         extent: (запад, восток, юг, север) в градусах
     """
+    west, east, south, north = _clamp_map_bounds(west, east, south, north)
     try:
         zoom = _choose_zoom(west, south, east, north)
         x_west, y_north, x_east, y_south = _tile_span(west, south, east, north, zoom)
+        if x_west > x_east or y_north > y_south:
+            raise ValueError("пустая сетка тайлов для окна карты")
         rows = []
         for y_tile in range(y_north, y_south + 1):
             row = [_download_tile(zoom, x_tile, y_tile) for x_tile in range(x_west, x_east + 1)]
+            if not row:
+                raise ValueError("пустой ряд тайлов")
             rows.append(np.concatenate(row, axis=1))
+        if not rows:
+            raise ValueError("пустая подложка")
         image = np.concatenate(rows, axis=0)
         bound_west, _, _, bound_north = _tile_bounds(x_west, y_north, zoom)
         _, bound_south, bound_east, _ = _tile_bounds(x_east, y_south, zoom)
         return image, (bound_west, bound_east, bound_south, bound_north)
-    except OSError as error:
+    except (OSError, ValueError) as error:
         print(f"Подложку OSM загрузить не удалось ({error}). Рисуется только трек.")
         return None
+
+
+def bbox_from_move_points(
+    lon: np.ndarray,
+    lat: np.ndarray,
+    move_mask: np.ndarray,
+    margin_fraction: float = _DEFAULT_MOVE_BBOX_MARGIN,
+) -> list[float]:
+    """Строит bbox карты по координатам штатного хода (move).
+
+    Args:
+        lon: Долготы всех точек участка.
+        lat: Широты всех точек участка.
+        move_mask: True для точек move (истинная разметка).
+        margin_fraction: Доля размаха lon/lat, добавляемая с каждой стороны (0.05 = 5%).
+
+    Returns:
+        list[float]: [юг, запад, север, восток] в градусах WGS-84.
+    """
+    move_mask = np.asarray(move_mask, dtype=bool)
+    lon = np.asarray(lon, dtype=np.float64)
+    lat = np.asarray(lat, dtype=np.float64)
+    if move_mask.shape != lon.shape:
+        raise ValueError("move_mask должен совпадать по длине с lon/lat")
+    if not np.any(move_mask):
+        raise ValueError("Нет точек move для bbox карты")
+    lon_move = lon[move_mask]
+    lat_move = lat[move_mask]
+    west = float(np.min(lon_move))
+    east = float(np.max(lon_move))
+    south = float(np.min(lat_move))
+    north = float(np.max(lat_move))
+    lon_span = max(east - west, 1e-9)
+    lat_span = max(north - south, 1e-9)
+    pad_lon = margin_fraction * lon_span
+    pad_lat = margin_fraction * lat_span
+    west, east, south, north = _clamp_map_bounds(
+        west - pad_lon,
+        east + pad_lon,
+        south - pad_lat,
+        north + pad_lat,
+    )
+    return [south, west, north, east]
 
 
 def _limits_from_bbox(bbox: Sequence[float]) -> MapLimits:
@@ -285,27 +385,7 @@ def _limits_from_bbox(bbox: Sequence[float]) -> MapLimits:
         raise ValueError("bbox: южная граница должна быть меньше северной")
     if west >= east:
         raise ValueError("bbox: западная граница должна быть меньше восточной")
-    return west, east, south, north
-
-
-def _padded_limits(lon: np.ndarray, lat: np.ndarray) -> MapLimits:
-    """
-    Прямоугольник вокруг точек с полями: запад, восток, юг, север.
-    Args:
-        lon: Массив долгот
-        lat: Массив широт
-
-    Returns:
-        limits: Границы прямоугольника в формате (запад, восток, юг, север)
-    """
-    lon_span = max(float(np.max(lon) - np.min(lon)), 0.01)
-    lat_span = max(float(np.max(lat) - np.min(lat)), 0.01)
-    return (
-        float(np.min(lon) - 0.45 * lon_span),
-        float(np.max(lon) + 0.18 * lon_span),
-        float(np.min(lat) - 0.22 * lat_span),
-        float(np.max(lat) + 0.18 * lat_span),
-    )
+    return _clamp_map_bounds(west, east, south, north)
 
 
 def _draw_basemap(axis: Axes, basemap: Optional[BasemapBundle], limits: MapLimits) -> None:
