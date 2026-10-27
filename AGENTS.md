@@ -40,3 +40,14 @@
 - Известные поломки: `import app.filters` (в `kalman_filter_cv` ссылка на
   отсутствующий `app.working`) и `__main__` в `classification_metrics`
   (вызывает несуществующий `plot_track`).
+
+## Cursor Cloud specific instructions
+
+- В базовом образе нет пакета `python3.12-venv`. Перед созданием окружения:
+  `sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3.12-venv`.
+- Виртуальное окружение — `.venv` в корне репозитория:
+  `python3.12 -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -r requirements.txt 'Pillow>=10'`.
+  Явный `Pillow` нужен, пока правка `requirements.txt` не попала в ветку по умолчанию: `app.viz.track_osm` импортирует `PIL`.
+- Запускать Python из корня репозитория и задавать `MPLBACKEND=Agg`. Долгоживущего сервиса нет.
+- Проверка окружения: импорт `app.evaluation`, `app.geo`, `app.detectors`, расчёт `TrajectoryMetrics.compute_all` на коротком синтетическом ряде и `plot_track_maps(..., use_basemap=False)`.
+- `import app.filters` по-прежнему падает на `app.working`. `data/*.csv` в git нет, поэтому блокноты на `../data/2.csv` в чистом checkout не воспроизводятся.

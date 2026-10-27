@@ -18,6 +18,7 @@ data/raw/5.csv
 *csv
 1.md
 *__pycache__*
+.venv/
 report/*.aux
 report/*.log
 report/*.out

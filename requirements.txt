@@ -12,6 +12,7 @@ statsmodels>=0.14.0
 hmmlearn>=0.3.2
 geopy>=2.4.0
 tqdm>=4.66.0
+Pillow>=10
 black>=23.3.0
 pylint>=2.15.0
 isort>=8.0.1
