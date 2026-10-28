@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from typing import Dict
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from app.evaluation.classification_metrics import ClassificationMetrics
@@ -35,11 +37,8 @@ class TrajectoryMetrics:
 
 
 if __name__ == "__main__":
-    """21 точка: петля на индексах 8–12, задержка детекции и одно ложное срабатывание."""
-    import math
-
-    import matplotlib.pyplot as plt
-
+    # 21 точка: петля на индексах 8–12, задержка детекции и одно ложное срабатывание.
+    # app.viz импортируется здесь: на уровне модуля он замыкает цикл app.viz → app.evaluation → app.viz.
     from app.viz import plot_track_maps
 
     _REPORT_ROWS = (

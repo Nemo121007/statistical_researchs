@@ -10,7 +10,6 @@ import numpy as np
 
 from app.evaluation.series import TrajectorySeries
 from app.geo.local_enu import LocalEnuConverter
-from app.viz import plot_track_maps
 
 
 def _path_length_xy(x_m: np.ndarray, y_m: np.ndarray) -> float:
@@ -69,10 +68,10 @@ class GeospatialMetrics:
         """
         ground_truth.assert_same_index(prediction)
         time_s = ground_truth.time_seconds
-        gt_lat_f, gt_lon_f = GeospatialMetrics.__fill_anomaly_coordinates(
+        gt_lat_f, gt_lon_f = GeospatialMetrics._fill_anomaly_coordinates(
             time_s, ground_truth.lat, ground_truth.lon, ground_truth.anomaly_mask
         )
-        pred_lat_f, pred_lon_f = GeospatialMetrics.__fill_anomaly_coordinates(
+        pred_lat_f, pred_lon_f = GeospatialMetrics._fill_anomaly_coordinates(
             time_s, prediction.lat, prediction.lon, prediction.anomaly_mask
         )
         return gt_lat_f, gt_lon_f, pred_lat_f, pred_lon_f
@@ -139,7 +138,7 @@ class GeospatialMetrics:
             float: длина заполненной эталонной траектории.
         """
         time_s = ground_truth.time_seconds
-        lat_f, lon_f = GeospatialMetrics.__fill_anomaly_coordinates(
+        lat_f, lon_f = GeospatialMetrics._fill_anomaly_coordinates(
             time_s, ground_truth.lat, ground_truth.lon, ground_truth.anomaly_mask
         )
         origin_lat = float(lat_f[0])
@@ -158,7 +157,7 @@ class GeospatialMetrics:
             float: длина заполненной траектории prediction.
         """
         time_s = prediction.time_seconds
-        lat_f, lon_f = GeospatialMetrics.__fill_anomaly_coordinates(
+        lat_f, lon_f = GeospatialMetrics._fill_anomaly_coordinates(
             time_s, prediction.lat, prediction.lon, prediction.anomaly_mask
         )
         origin_lat = float(lat_f[0])
@@ -167,54 +166,58 @@ class GeospatialMetrics:
         return _path_length_xy(x_m, y_m)
 
     @staticmethod
-    def __fill_anomaly_coordinates(
-            time_s: np.ndarray,
-            lat: np.ndarray,
-            lon: np.ndarray,
-            is_anomaly: np.ndarray,
+    def _fill_anomaly_coordinates(
+        time_s: np.ndarray,
+        lat: np.ndarray,
+        lon: np.ndarray,
+        is_anomaly: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Строит траекторию с интерполяцией в точках аномалии между штатными соседями.
+        """Строит траекторию с интерполяцией по времени в точках аномалии между штатными соседями.
 
-        В штатных точках координаты сохраняются. Для аномалии без пары соседей остаются исходные координаты.
+        В штатных точках координаты сохраняются. Аномалия без штатного соседа с одной из сторон или с
+        неположительным интервалом времени между соседями сохраняет исходные координаты. Долгота
+        интерполируется по кратчайшей дуге через антимеридиан.
+
         Args:
-            time_s: массив времени
-            lat: массив широт
-            lon: массив долгот
-            is_anomaly: массив булевых значений, указывающих на аномалии
+            time_s: Время точек, с.
+            lat: Широты, градусы.
+            lon: Долготы, градусы.
+            is_anomaly: Маска аномалий той же длины, что ``lat`` и ``lon``.
 
         Returns:
-            tuple[np.ndarray, np.ndarray]: заполненные массивы широт и долгот
+            Заполненные массивы широт и долгот.
         """
+        time_s = np.asarray(time_s, dtype=np.float64)
         lat_out = np.asarray(lat, dtype=np.float64).copy()
         lon_out = np.asarray(lon, dtype=np.float64).copy()
         anomaly = np.asarray(is_anomaly, dtype=bool)
-        n = lat_out.size
-        normal = ~anomaly
+        count = lat_out.size
+        positions = np.arange(count)
 
-        for index in range(n):
-            if not anomaly[index]:
-                continue
-            left = np.flatnonzero(normal[:index])
-            right = np.flatnonzero(normal[index + 1:])
-            if left.size == 0 or right.size == 0:
-                continue
-            j = int(left[-1])
-            k = int(right[0]) + index + 1
-            dt = time_s[k] - time_s[j]
-            if dt <= 0.0:
-                continue
-            alpha = (time_s[index] - time_s[j]) / dt
-            lat_out[index] = lat_out[j] + alpha * (lat_out[k] - lat_out[j])
-            lon_left = lon_out[j]
-            delta_lon = (lon_out[k] - lon_left + 180.0) % 360.0 - 180.0
-            lon_out[index] = (lon_left + alpha * delta_lon + 180.0) % 360.0 - 180.0
+        # Для каждой точки — индекс ближайшей штатной слева и справа (-1 и count, если такой нет).
+        left = np.maximum.accumulate(np.where(anomaly, -1, positions))
+        right = np.minimum.accumulate(np.where(anomaly, count, positions)[::-1])[::-1]
+        target = np.flatnonzero(anomaly & (left >= 0) & (right < count))
+        j = left[target]
+        k = right[target]
+        dt = time_s[k] - time_s[j]
+        # ~(dt <= 0) вместо dt > 0: NaN-интервал обрабатывается так же, как в поточечной версии.
+        keep = ~(dt <= 0.0)
+        target, j, k, dt = target[keep], j[keep], k[keep], dt[keep]
 
+        alpha = (time_s[target] - time_s[j]) / dt
+        lat_out[target] = lat_out[j] + alpha * (lat_out[k] - lat_out[j])
+        lon_left = lon_out[j]
+        delta_lon = (lon_out[k] - lon_left + 180.0) % 360.0 - 180.0
+        lon_out[target] = (lon_left + alpha * delta_lon + 180.0) % 360.0 - 180.0
         return lat_out, lon_out
 
 
 if __name__ == "__main__":
-    """21 точка: петля на индексах 8–12, задержка детекции и одно ложное срабатывание."""
+    # 21 точка: петля на индексах 8–12, задержка детекции и одно ложное срабатывание.
+    # app.viz импортируется здесь: на уровне модуля он замыкает цикл app.viz → app.evaluation → app.viz.
+    from app.viz import plot_track_maps
+
     count = 21
     time = np.arange(count, dtype=np.float64)
     latitude = 43.04 + 0.001 * time

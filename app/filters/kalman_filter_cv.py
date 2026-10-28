@@ -1,9 +1,6 @@
-from pathlib import Path
 from typing import Tuple
 
 import numpy as np
-
-from app.working.data_processor import DataProcessor
 
 
 class KalmanFilterCV:
@@ -82,7 +79,7 @@ class KalmanFilterCV:
             - log_likelihood: логарифм правдоподобия каждого наблюдения;
             - mahalanobis_sq: квадрат расстояния Махаланобиса для каждого наблюдения.
         """
-        if not (len(x) == len(y) == len(time)):
+        if not len(x) == len(y) == len(time):
             raise ValueError("x, y и time должны иметь одинаковую длину")
 
         if len(x) < 2:
@@ -169,10 +166,8 @@ class KalmanFilterCV:
         for k in range(1, len(time)):
             # np.datetime64 -> секунды
             dt = (time[k] - time[k - 1]) / np.timedelta64(1, "s")
-            dt = float(dt)
             # Некорректный dt не должен ломать фильтр.
-            if dt <= 0.0:
-                dt = 0.0
+            dt = max(float(dt), 0.0)
             # -----------------------------------------------------
             # Prediction
             # -----------------------------------------------------
@@ -254,37 +249,3 @@ class KalmanFilterCV:
             log_likelihood,
             mahalanobis_sq,
         )
-
-
-if __name__ == "__main__":
-    # Определение путей
-    project_root = Path(__file__).parent.parent.parent
-    data_path = project_root / "data" / "post_processing" / "example.csv"
-
-    # Директории для сохранения картинок
-    pict_dir = project_root / "data" / "pict"
-    true_dir = pict_dir / "true"
-    false_dir = pict_dir / "false"
-
-    # Инициализация директорий
-    true_dir.mkdir(parents=True, exist_ok=True)
-    false_dir.mkdir(parents=True, exist_ok=True)
-
-    # Инициализация классов
-    processor = DataProcessor()
-
-    # Параметры фильтра идентичны для обоих списков, поэтому создаем один экземпляр
-    # (метод filter сбрасывает состояние внутри себя)
-    kf = KalmanFilterCV(sigma_acc=0.0001 * 0.04, sigma_meas=1 * 2.4)
-
-    # Загрузка и парсинг
-    df = processor.load_csv(data_path)
-    list_valid_df, list_invalid_df = processor.parse_intervals(df)
-
-    # Обработка валидных интервалов
-    processor.process_track_list(list_valid_df, true_dir, processor, kf, "валидных интервалов")
-
-    # Обработка невалидных интервалов
-    processor.process_track_list(list_invalid_df, false_dir, processor, kf, "невалидных интервалов")
-
-    print("Готово.")

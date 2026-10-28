@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from app.evaluation.series import TrajectorySeries
-from app.viz import plot_track_maps
 
 
 def _validate_time_axis(ground_truth: TrajectorySeries, prediction: TrajectorySeries) -> np.ndarray:
@@ -135,7 +134,10 @@ class TemporalMetrics:
 
 
 if __name__ == "__main__":
-    """21 точка: петля на индексах 8–12, задержка детекции и одно ложное срабатывание."""
+    # 21 точка: петля на индексах 8–12, задержка детекции и одно ложное срабатывание.
+    # app.viz импортируется здесь: на уровне модуля он замыкает цикл app.viz → app.evaluation → app.viz.
+    from app.viz import plot_track_maps
+
     count = 21
     time = np.arange(count, dtype=np.float64)
     latitude = 43.04 + 0.001 * time

@@ -61,6 +61,8 @@ class Way:
 
 
 class WayCollector:
+    """Коллекция путей Way с уникальными идентификаторами."""
+
     def __init__(self) -> None:
         self.ways: Dict[int, Way] = {}
         self._next_id: int = 1

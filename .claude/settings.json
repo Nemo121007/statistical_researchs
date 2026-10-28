@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python -m app*)",
+      "Bash(../.venv/bin/python -m app*)",
+      "Bash(.venv/bin/python -m json.tool *)",
+      "Bash(../.venv/bin/python -m json.tool *)",
+      "Bash(.venv/bin/pylint *)",
+      "Bash(../.venv/bin/pylint *)",
+      "Bash(grep *)",
+      "Bash(sed -n *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(ls *)",
+      "Bash(file *)"
+    ],
+    "ask": [
+      "Edit(**/report/Отчёт.tex)",
+      "Edit(**/docs/notes/methods.md)",
+      "Bash(.venv/bin/pip *)",
+      "Bash(~/.local/bin/uv pip *)",
+      "Bash(uv pip *)"
+    ]
+  }
+}

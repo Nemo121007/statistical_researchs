@@ -65,6 +65,8 @@ class Area:
 
 
 class AreaCollector:
+    """Коллекция полигонов Area с уникальными идентификаторами."""
+
     def __init__(self) -> None:
         self.areas: Dict[int, Area] = {}
         self._next_id: int = 1

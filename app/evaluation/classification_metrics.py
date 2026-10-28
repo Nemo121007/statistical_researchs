@@ -141,7 +141,10 @@ class ClassificationMetrics:
 
 
 if __name__ == "__main__":
-    """21 точка: петля на индексах 8–12, задержка детекции и одно ложное срабатывание."""
+    # 21 точка: петля на индексах 8–12, задержка детекции и одно ложное срабатывание.
+    # app.viz импортируется здесь: на уровне модуля он замыкает цикл app.viz → app.evaluation → app.viz.
+    from app.viz import plot_track_maps
+
     count = 21
     time = np.arange(count, dtype=np.float64)
     latitude = 43.04 + 0.001 * time
@@ -161,5 +164,5 @@ if __name__ == "__main__":
     print("Классификационные метрики (демо-трек):")
     for name, value in metrics.items():
         print(f"  {name}: {value:.4f}" if math.isfinite(value) else f"  {name}: —")
-    ClassificationMetrics.plot_track(prediction, ground_truth)
+    plot_track_maps(prediction, ground_truth)
     plt.show()

@@ -1,0 +1,89 @@
+## 2026-10-28 — Настройка правил работы агентов
+AGENTS.md: добавлены разделы «Журнал изменений» (ведение change.log вместо коммитов в рабочей копии) и «Согласование действий» (что делать по команде, что спрашивать, когда допустимы временные логи); раздел «Инструменты» переписан — чтение любым инструментом для чтения, включая grep/sed/head/jq, запрет временных Python-файлов, правка ячеек блокнотов специнструментом; удалены упоминания архива docs/notes/results.md, example_model_1/2.ipynb и запрет на 1.md; данные экспериментов — ../data/test.csv вместо ../data/2.csv; добавлено требование держать requirements.txt актуальным
+notebooks/AGENTS.md: удалено упоминание устаревших docs/notes/results.md и example_model_1/2.ipynb во вступлении
+CLAUDE.md: новый файл, подключает общие правила из AGENTS.md через @AGENTS.md
+
+## 2026-10-28 — Перевод блокнотов на тестовые данные
+notebooks/example_model.ipynb: путь к данным path_data и докстринг select_trajectory_columns переведены с data/2.csv на data/test.csv
+notebooks/kalman_change_points.ipynb: поиск корня проекта, сообщение FileNotFoundError, path и описание фрагмента в markdown переведены с data/2.csv на data/test.csv; результат прошлого прогона на 2.csv в выводах и старый вывод ячейки не тронуты
+data/test.csv: заменён синтетическим рядом из 6 000 строк для проверки запускаемости (move 3 551, anomaly 2 329, stand 120): шаг 10 с с 25 паузами связи 200–1800 с, 28 аномальных эпизодов трёх видов (телепорт с дрейфом, сильный шум, замершие координаты), anomaly в начале и в конце ряда, 12 мусорных строк (нулевой GPS, NaN, выход за WGS-84, нечисловое значение) и пара переставленных по времени строк
+CLAUDE.md: убрана ссылка @AGENTS.md — AGENTS.md и так загружается автоматически, оставлена текстовая отсылка
+
+## 2026-10-28 — Уменьшение констант блокнота Калмана
+notebooks/kalman_change_points.ipynb: под синтетический data/test.csv уменьшены константы фрагмента и теста — START_IND 200_000 → 0, END_IND 350_000 → 6_000, TEST_SIZE 50_000 → 2_000
+
+## 2026-10-28 — Удаление data_processor и исправление пути к фильтрам Калмана
+app/filters/kalman_filter_cv.py: удалены импорт несуществующего app.working.data_processor.DataProcessor, неиспользуемый Path и нерабочий блок __main__ (демо на отсутствующем data/post_processing/example.csv); исправлены замечания pylint — лишние скобки после not в проверке длин в filter, обнуление отрицательного dt через max; import app.filters снова работает
+notebooks/kalman_change_points.ipynb: в load_reference_filters удалена заглушка модулей app.working и app.working.data_processor, путь к фильтрам исправлен с app/old/working на app/filters; удалён ставший ненужным import types
+data/test.csv: перегенерирован — участки [300, 1000) и [2600, 3300) оставлены чистым move без пауз связи, стоянок и мусорных строк, по их краям поставлены эпизоды anomaly по 20 точек (нужен непрерывный кусок move ≥ 400 точек на train для сверки фильтров); итог 6 000 строк: move 4 361, anomaly 1 519, stand 120
+
+## 2026-10-28 — Устранение циклического импорта app.viz
+app/evaluation/geospatial_metrics.py: устранён циклический импорт app.viz → app.evaluation → app.viz — импорт plot_track_maps перенесён с уровня модуля внутрь блока __main__; строка-«докстринг» в __main__ заменена комментарием (pylint W0105)
+app/evaluation/temporal_metrics.py: то же — импорт plot_track_maps перенесён внутрь __main__, строка-«докстринг» заменена комментарием; import app.viz и app.viz.track_osm теперь работают в любом порядке
+AGENTS.md: в разделе «Проверка» убрана исправленная поломка import app.filters, добавлено правило не импортировать app.viz на уровне модулей app.evaluation
+
+## 2026-10-28 — Исправление __main__ в classification_metrics
+app/evaluation/classification_metrics.py: в __main__ вызов несуществующего ClassificationMetrics.plot_track заменён на plot_track_maps из app.viz (импорт внутри __main__, как в geospatial_metrics и temporal_metrics); строка-«докстринг» в __main__ заменена комментарием (pylint W0105)
+AGENTS.md: из раздела «Проверка» убрана исправленная поломка __main__ в classification_metrics
+
+## 2026-10-28 — Расширение правил работы
+AGENTS.md: журнал — блоки заданий с заголовком «дата — задание»; инструменты — порядок правки больших блокнотов (grep -n, sed -n, sed -i по номерам строк, проверка json.tool); согласование — остановка с вариантами при выходе за рамки команды, граница pylint (R09xx только сообщать); новые разделы «Отчёт о задаче» (коротко) и «Стиль кода» (русский, Google docstrings, 120 символов, новый код в стиле black, без прогона black/isort по файлам целиком); эксперименты — test.csv только для запускаемости и перегенерация без сохранения генератора, прогон блокнота в памяти через IPython без сохранения выходов, обновление markdown модели при правке её кода; проверка — импорт, pylint и python -m только изменённых модулей
+
+## 2026-10-28 — Чистка example_model.ipynb (дубли, импорты, имя сводки ARIMA)
+notebooks/example_model.ipynb: в ячейке Hampel удалено повторное объявление HAMPEL_HALF_WINDOW и HAMPEL_THRESHOLD_EXTRA между hampel_scores и hampel_speed_scores; удалены неиспользуемые import shutil, subprocess, sys, импорт GeospatialMetrics из app.evaluation и константа TORCH_CUDA_INDEX; сводка ARIMA переименована summary → arima_summary в ячейке модели и в _model_summary_catalog
+notebooks/AGENTS.md: из правил про дубли констант и неиспользуемые импорты убраны примеры исправленных случаев (HAMPEL_*, shutil/subprocess)
+
+## 2026-10-28 — Синхронизация зависимостей
+requirements.txt: убраны дубли pyro-ppl и statsmodels в конце файла; добавлены Pillow>=10.0.0 (импортируется в app/viz/track_osm.py), ipython>=8.0.0 (IPython в track_osm.py и блокнотах) и ipykernel>=6.0.0 (ядро для запуска блокнотов)
+pyproject.toml: список dependencies приведён к requirements.txt — добавлены pyro-ppl, Pillow, statsmodels, hmmlearn, ipython, ipykernel
+AGENTS.md: в разделе «Окружение» вместо пометки об отставании pyproject.toml — правило держать requirements.txt и pyproject.toml одинаковыми
+
+## 2026-10-28 — Исправление замечаний pylint в app/
+app/detectors/gp_bayes_filter.py: атрибуты нормировки и разложения GP (_input_center, _input_scale, _target_center, _target_scale, _train_z, _chol, _alpha, _inv_length_sq) объявлены в __init__ пустыми массивами (W0201); в _select_hyperparameters лучший счёт хранится в отдельной best_score, best — кортеж без счёта (ложное E1136), поведение выбора гиперпараметров прежнее
+app/evaluation/trajectory_metrics.py: math и matplotlib.pyplot перенесены из __main__ на уровень модуля (C0412), строка-«докстринг» в __main__ заменена комментарием (W0105)
+app/viz/track_osm.py: импорты упорядочены — сторонние перед app (C0411); get_ipython и display импортируются на уровне модуля из IPython.core.getipython и IPython.display (C0415, E0611); в _present_figure убран try/except Exception (W0718) — IPython теперь обязательная зависимость
+app/geo/area_collector.py: добавлен докстринг класса AreaCollector (C0115)
+app/geo/way_collector.py: добавлен докстринг класса WayCollector (C0115)
+app/filters/kalman_filter_rw.py: добавлен перевод строки CRLF в конце файла (C0304)
+AGENTS.md: в «Стиль кода» добавлено правило сохранять переводы строк CRLF в app/*.py при правке через shell
+
+## 2026-10-28 — Правила стиля кода
+AGENTS.md: раздел «Стиль кода» расширен — строка документации и from __future__ import annotations в каждом модуле; обязательные аннотации, встроенные generic-типы, nullable только через Optional; шаблон докстринга Google с секциями Returns/Raises только при наличии и выделением аргументов в ``…``; суффиксы единиц, одно подчёркивание для приватного, именованные константы; проверка входа через ValueError, запрет широкого except; соглашения о данных и типах numpy (float64, bool); векторизация без изменения логики; правила комментариев и демо в __main__
+
+## 2026-10-28 — Векторизация заполнения аномалий в GeospatialMetrics
+app/evaluation/geospatial_metrics.py: _fill_anomaly_coordinates векторизован — ближайшие штатные соседи слева и справа находятся через np.maximum/np.minimum.accumulate вместо поиска в цикле по каждой аномальной точке (квадратичная сложность → линейная, на 50 000 точках 0,56 с → 0,002 с); результат побитово совпадает с прежней версией, включая точки без соседа, неположительный и NaN-интервал времени, переход через антимеридиан; метод переименован __fill_anomaly_coordinates → _fill_anomaly_coordinates (без name mangling), докстринг приведён к шаблону
+
+## 2026-10-28 — Права Claude Code для проекта
+.claude/settings.json: новый файл; без запроса разрешены проверки и чтение — python -m app.* и json.tool, pylint из .venv (из корня и из notebooks/), grep, sed -n, head, tail, wc, ls, file; всегда с подтверждением — правка report/Отчёт.tex и docs/notes/methods.md, установка пакетов через pip и uv pip
+
+## 2026-10-28 — Скиллы Claude Code: check-app и run-notebook
+.claude/skills/check-app/SKILL.md: новый скилл /check-app — проверка изменённых модулей app/: импорт, pylint (исправление всего, кроме R09xx), демо в __main__, переводы строк CRLF, короткий отчёт
+.claude/skills/run-notebook/SKILL.md: новый скилл /run-notebook — прогон блокнота в памяти без сохранения выходов, вызов пользователем считается разрешением на полный прогон, отчёт по упавшим ячейкам
+.claude/skills/run-notebook/run_notebook.py: скрипт прогона — InteractiveShell с корнем проекта в sys.path и отключённым переключением GUI, статус и время по каждой code-ячейке, трейсбеки упавших, флаг --stop-on-error, код выхода 1 при падениях
+AGENTS.md: в «Эксперименты» добавлена ссылка на готовый скрипт прогона блокнота
+
+## 2026-10-28 — Скилл Claude Code: new-detector
+.claude/skills/new-detector/SKILL.md: новый скилл /new-detector — порядок добавления детектора в example_model.ipynb по образцу ARIMA: уточнение метода и имён, markdown по шаблону и правилам notebooks/AGENTS.md, code-ячейка по шаблону, вставка скриптом, проверка прогоном с согласия, запись в change.log, Отчёт и methods.md — только после подтверждения готовности
+.claude/skills/new-detector/code_template.py: шаблон code-ячейки модели — константы в начале, функции fit/scores, цикл сценариев df1/df2 с порогом select_anomaly_threshold, сводка <slug>_summary, карта эталона и карты модели
+.claude/skills/new-detector/insert_cells.py: скрипт вставки markdown- и code-ячеек детектора перед master-summary-md и регистрации модели в _model_summary_catalog; сохраняет форматирование и CRLF, отказывается при занятых id или невоспроизводимом формате файла
+
+## 2026-10-28 — Константа ARIMA_ORDER в начале ячейки
+notebooks/example_model.ipynb: в ячейке arima-code-cell константа ARIMA_ORDER перенесена из середины (перед SCENARIOS) в начало ячейки, как требует notebooks/AGENTS.md; лишняя третья пустая строка перед SCENARIOS убрана
+
+## 2026-10-28 — Агент-ревьюер (черновик)
+.claude/agents/reviewer.md: новый агент reviewer — независимое ревью изменений задания без правки файлов: корректность и крайние случаи, соглашения о данных и порог, стиль кода, правила блокнотов, границы задания (Отчёт, methods.md, зависимости), запись в change.log; ответ — вердикт и список замечаний file:line по важности
+.claude/agents/reviewer.md: в описании закреплено — ревьюер вызывается только по явной команде пользователя; модель в настройках агента не задаётся (наследуется, пользователь укажет сам)
+
+## 2026-10-28 — Импорт app в example_model.ipynb без PyCharm
+notebooks/example_model.ipynb: в ячейке импортов перед импортом app корень проекта (path_root = Path.cwd().parent) добавляется в sys.path — блокнот теперь работает в обычном Jupyter, запущенном из notebooks/, а не только в PyCharm; возвращён import sys; сторонние импорты (hmmlearn, numpy.linalg, scipy.linalg, statsmodels) перенесены из группы app в общую группу и упорядочены по алфавиту; path_data объявляется после импортов app
+
+## 2026-10-28 — Установка CUDA-сборки torch в example_model.ipynb
+notebooks/example_model.ipynb: в ячейку гиперпараметров возвращена константа TORCH_CUDA_INDEX (индекс колёс cu124); в ячейке импортов до импорта torch добавлена функция ensure_cuda_torch и её вызов — при наличии GPU NVIDIA (nvidia-smi) и torch без CUDA (проверка в отдельном процессе) torch переустанавливается из TORCH_CUDA_INDEX, если torch уже загружен в ядре — сообщение о перезапуске ядра; без GPU ничего не ставится; возвращены import shutil и subprocess; существующая развилка DEVICE (cuda:0 при доступной CUDA, иначе cpu) не менялась; импорт torch.distributions (Normal, kl_divergence) на месте и не трогался
+
+## 2026-10-28 — Настройка OpenCode по образцу Claude Code
+opencode.jsonc: добавлены instructions (notebooks/AGENTS.md грузится всегда) и permission — bash по умолчанию с запросом, без запроса те же проверочные команды, что в .claude/settings.json (python -m app*, json.tool, pylint из .venv, grep, sed -n, head, tail, wc, ls, file), pip/uv pip — с запросом; правка report/Отчёт.tex и docs/notes/methods.md — с запросом; вызов агента reviewer основным агентом — с запросом
+.opencode/agents/reviewer.md: новый субагент reviewer — правка и webfetch запрещены, bash только на чтение и проверки; инструкция не дублируется, агент читает общую .claude/agents/reviewer.md
+.opencode/commands/check-app.md, run-notebook.md, new-detector.md: новые команды, загружающие одноимённые скиллы из .claude/skills (OpenCode находит их там сам); run-notebook и new-detector фиксируют, что вызов команды — разрешение пользователя
+.opencode/commands/review.md: новая команда /review — запуск субагента reviewer по изменениям задания или последнему блоку change.log
+.claude/skills/check-app/SKILL.md, run-notebook/SKILL.md, new-detector/SKILL.md: строка про аргументы сделана общей для Claude Code ($ARGUMENTS) и OpenCode (аргументы команды или запроса)
+AGENTS.md: новый раздел «Инструменты агентов» — где лежат правила, скиллы, ревьюер, команды OpenCode и права обоих инструментов, правило одного экземпляра скиллов

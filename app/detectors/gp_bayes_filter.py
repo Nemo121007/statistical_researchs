@@ -42,6 +42,15 @@ class GpEkfModel:
         self.noise = 0.3
         self.n_support = 0
         self._ready = False
+        # Нормировка, опорные точки и разложение GP — заполняются в _fit_gps.
+        self._input_center = np.empty(0)
+        self._input_scale = np.empty(0)
+        self._target_center = np.empty(0)
+        self._target_scale = np.empty(0)
+        self._train_z = np.empty((0, 3))
+        self._chol = np.empty((0, 0))
+        self._alpha = np.empty((0, 4))
+        self._inv_length_sq = np.empty(0)
 
     def fit(self, xy: np.ndarray, t_sec: np.ndarray, valid: np.ndarray) -> "GpEkfModel":
         """Учит остаток постоянной скорости на переходах между штатными точками."""
@@ -214,6 +223,7 @@ def _select_hyperparameters(
     features: np.ndarray, targets: np.ndarray
 ) -> tuple[float, float, np.ndarray, np.ndarray]:
     """Длина корреляции и шум — максимум лог-правдоподобия на короткой сетке."""
+    best_score = -np.inf
     best = None
     for lengthscale in (0.6, 1.0, 1.5, 2.2):
         for noise in (0.15, 0.3, 0.5):
@@ -229,12 +239,12 @@ def _select_hyperparameters(
                 quad = float(targets[:, column] @ alpha)
                 log_det = 2.0 * float(np.sum(np.log(np.diag(chol))))
                 score += -0.5 * quad - 0.5 * log_det
-            if best is None or score > best[0]:
-                best = (score, lengthscale, noise, chol, np.column_stack(alphas))
+            if best is None or score > best_score:
+                best_score = score
+                best = (lengthscale, noise, chol, np.column_stack(alphas))
     if best is None:
         raise LinAlgError("Ковариация GP-EKF не разложилась ни на одной паре гиперпараметров")
-    _, lengthscale, noise, chol, alpha = best
-    return lengthscale, noise, chol, alpha
+    return best
 
 
 def _unit_kernel(features: np.ndarray, lengthscale: float) -> np.ndarray:

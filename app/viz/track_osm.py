@@ -8,14 +8,16 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Literal, Optional, Sequence, Tuple, Union
 
-from app.evaluation.series import TrajectorySeries
-
 import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import numpy as np
+from IPython.core.getipython import get_ipython
+from IPython.display import display
 from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from PIL import Image
+
+from app.evaluation.series import TrajectorySeries
 
 MapLimits = Tuple[float, float, float, float]
 BasemapExtent = Tuple[float, float, float, float]
@@ -736,16 +738,10 @@ def _present_figure(figure: plt.Figure) -> None:
     Args:
         figure: Фигура matplotlib
     """
-    try:
-        from IPython import get_ipython
-        from IPython.display import display
-
-        if get_ipython() is not None:
-            display(figure)
-            plt.close(figure)
-            return
-    except Exception:
-        pass
+    if get_ipython() is not None:
+        display(figure)
+        plt.close(figure)
+        return
     plt.show()
 
 
