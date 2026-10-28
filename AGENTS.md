@@ -45,7 +45,10 @@
   в `.opencode/skills/` не заводить. Скрипты скиллов лежат рядом с `SKILL.md`.
 - Ревьюер — инструкция в `.claude/agents/reviewer.md`; `.opencode/agents/reviewer.md` задаёт права
   и отсылает к ней. Вызывается только по команде пользователя.
-- Команды OpenCode (`.opencode/commands/`): `/check-app`, `/run-notebook`, `/new-detector`, `/review`.
+- Команды OpenCode (`.opencode/commands/`): `/check-app`, `/run-notebook`, `/new-detector`, `/report`, `/review`.
+- Отчёт — скилл `report`; план переписывания по этапам — `report/rewrite_plan.md`;
+  обозначения и термины — `report/glossary.md`. Глоссарий актуализировать в том же
+  задании, где в отчёте, блокноте или `docs/notes/` появилось новое или изменённое обозначение или термин.
 - Права: Claude Code — `.claude/settings.json`, OpenCode — `opencode.jsonc`; менять согласованно.
 
 ## Согласование действий
